@@ -9,7 +9,8 @@ default-title = "Senza titolo"
 filename = "{{extra.sha}}-{{slug title}}"
 extension = "md"
 template = "source.md"
-exclude = ["raw/**", "log.md", "index.md"]
+# raw.local-*: la vecchia raw locale, conservata da `wizki raw` dopo lo spostamento in rete
+exclude = ["raw/**", "raw.local-*/**", "log.md", "index.md"]
 
 [group.sources]
 paths = ["sources"]

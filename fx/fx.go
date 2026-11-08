@@ -30,7 +30,7 @@ func Exec(ctx context.Context, s core.Step) error {
 		if _, err := os.Stat(s.To); err == nil {
 			return fmt.Errorf("%s esiste già: raw/ è immutabile, non sovrascrivo", s.To)
 		}
-		return os.Rename(s.From, s.To)
+		return moveFile(s.From, s.To)
 	case core.Extract:
 		if out, err := exec.CommandContext(ctx, "pdftotext", "-layout", s.PDF, s.Out).CombinedOutput(); err != nil {
 			return fmt.Errorf("pdftotext: %w: %s", err, strings.TrimSpace(string(out)))
@@ -57,6 +57,10 @@ func Exec(ctx context.Context, s core.Step) error {
 		}
 		_, err = f.Write(s.Data)
 		return errors.Join(err, f.Close())
+	case core.CopyVerify:
+		return copyVerify(s.From, s.To)
+	case core.Symlink:
+		return os.Symlink(s.Target, s.Link)
 	case core.Replace:
 		return replaceWithBackup(s)
 	case core.GitInit:
@@ -80,7 +84,7 @@ func Exec(ctx context.Context, s core.Step) error {
 func Undo(s core.Step) error {
 	switch s := s.(type) {
 	case core.Move:
-		return os.Rename(s.To, s.From)
+		return moveFile(s.To, s.From)
 	case core.Extract:
 		return os.Remove(s.Out)
 	case core.OCR:

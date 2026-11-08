@@ -53,6 +53,14 @@ Dopo, confronta i `.bak` con i file nuovi (eventuali personalizzazioni vanno
 riportate a mano), cancellali e lancia `./bin/wizki -root <nome> lint`: le note
 vecchie possono non avere i campi nuovi (es. `summary:`, `published:`).
 
+`raw/` può stare su una cartella di rete montata (NAS con NFS, SMB, sshfs, rclone…):
+`./bin/wizki -root <nome> raw <cartella>` mostra il piano, `raw <cartella> -apply` lo
+esegue. Copia gli originali verificandone lo SHA-256, lascia la vecchia raw come
+`raw.local-<data>` (da cancellare a mano dopo un controllo), trasforma `raw` in un
+link alla cartella remota e ci scrive il marcatore `.wizki-raw`. I path `raw/...`
+nelle note restano validi. Se la condivisione non è montata (manca il marcatore),
+`extract` e `upgrade` si fermano con exit 6 senza toccare nulla.
+
 ### Ingestion di una fonte
 
 `./bin/wizki inbox` elenca le fonti della inbox nell'ordine in cui acquisirle
@@ -77,7 +85,8 @@ vecchie possono non avere i campi nuovi (es. `summary:`, `published:`).
    contano per capirlo.
    Exit code 3 = nessun testo (PDF anche con l'OCR, o file di testo vuoto);
    4 = OCR del PDF non disponibile (mancano comandi o lingua); 5 = fonte già
-   acquisita (stesso contenuto di un originale in `raw/`, anche con nome diverso).
+   acquisita (stesso contenuto di un originale in `raw/`, anche con nome diverso);
+   6 = `raw/` in rete non raggiungibile (condivisione non montata).
    In tutti questi casi la fonte resta in inbox: fermati e dimmelo.
 2. Leggi il testo. Individua 1-3 topic: NOMI, italiano, minuscolo, singolare.
    Un topic conta solo se centrale, non se citato di passaggio.
@@ -202,6 +211,7 @@ Una fonte può toccare 10-15 pagine: è normale.
   secondo il riferimento resta senza file (lo segnala `wizki extract`). In quel
   caso linka l'immagine già in `raw/assets/` dalla nota-fonte.
 - Non creare cartelle tematiche né symlink: le viste per argomento sono query zk.
+  L'unico link ammesso è `raw`, creato da `wizki raw` per la raw in rete.
 - Wikilink SEMPRE con percorso e titolo: `[[topics/scuola|scuola]]`,
   `[[sources/1a2b3c4d-titolo|Titolo della nota]]`. Il titolo dopo `|` è il `title:`
   della nota di destinazione. Mai `[[percorso]]` nudo.
@@ -265,6 +275,14 @@ Afterwards, compare the `.bak` files with the new ones (any customizations must 
 carried over by hand), delete them and run `./bin/wizki -root <name> lint`: old
 notes may lack the new fields (e.g. `summary:`, `published:`).
 
+`raw/` can live on a mounted network folder (NAS via NFS, SMB, sshfs, rclone…):
+`./bin/wizki -root <name> raw <folder>` shows the plan, `raw <folder> -apply` runs it.
+It copies the originals verifying their SHA-256, keeps the old raw as
+`raw.local-<date>` (delete it by hand after checking), turns `raw` into a link
+to the remote folder and writes the `.wizki-raw` marker there. The `raw/...` paths
+in notes stay valid. If the share is not mounted (the marker is missing),
+`extract` and `upgrade` stop with exit 6 without touching anything.
+
 ### Ingesting a source
 
 `./bin/wizki inbox` lists the sources in the inbox in the order to ingest them
@@ -289,7 +307,8 @@ notes may lack the new fields (e.g. `summary:`, `published:`).
    matter to understand it.
    Exit code 3 = no text (PDF even with OCR, or empty text file); 4 = PDF OCR
    not available (missing commands or language); 5 = source already ingested
-   (same content as an original in `raw/`, even under a different name).
+   (same content as an original in `raw/`, even under a different name);
+   6 = network `raw/` unreachable (share not mounted).
    In all these cases the source stays in inbox: stop and tell me.
 2. Read the text. Identify 1-3 topics: NOUNS, Italian, lowercase, singular.
    A topic counts only if it is central, not if mentioned in passing.
@@ -415,6 +434,7 @@ A single source may touch 10-15 pages: that's normal.
   in the second the reference is left without a file (`wizki extract` reports it).
   In that case link the image already in `raw/assets/` from the source note.
 - Don't create thematic folders or symlinks: per-topic views are zk queries.
+  The only link allowed is `raw`, created by `wizki raw` for a network raw.
 - Wikilinks ALWAYS with path and title: `[[topics/scuola|scuola]]`,
   `[[sources/1a2b3c4d-titolo|Note title]]`. The title after `|` is the target
   note's `title:`. Never a bare `[[path]]`.

@@ -619,7 +619,15 @@ func TestInbox(t *testing.T) {
 // TestMain: nei test nessuno risponde alle domande, qualunque sia lo stdin.
 func TestMain(m *testing.M) {
 	interactive = func() bool { return false }
-	os.Exit(m.Run())
+	// la cache degli hash non deve finire nella cache vera dell'utente
+	cache, err := os.MkdirTemp("", "wizki-test-cache-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_CACHE_HOME", cache)
+	code := m.Run()
+	os.RemoveAll(cache)
+	os.Exit(code)
 }
 
 // onlyBins sostituisce il PATH con una cartella che contiene solo questi
@@ -701,5 +709,67 @@ func TestInitSenzaGit(t *testing.T) {
 	}
 	if _, err := os.Stat("w"); err == nil {
 		t.Error("init ha creato la cartella senza git")
+	}
+}
+
+// TestRawRemota: wizki raw sposta raw/ in una cartella "remota" (prova, poi
+// -apply), extract scrive lì attraverso il link; se la condivisione non è
+// montata (marcatore assente) extract esce con 6 e la fonte resta in inbox.
+func TestRawRemota(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, errb := do(t, "init", "w"); code != 0 {
+		t.Fatalf("init: %s", errb)
+	}
+	old := filepath.Join("w", "inbox", "vecchio.md")
+	_ = os.WriteFile(old, []byte("prima\n"), 0o644)
+	if code, _, errb := do(t, "-root", "w", "extract", old); code != 0 {
+		t.Fatalf("extract locale: %s", errb)
+	}
+	nas := t.TempDir()
+
+	code, out, errb := do(t, "-root", "w", "raw", nas)
+	if code != 0 || !strings.Contains(out, "prova: nessuna modifica") {
+		t.Fatalf("prova: exit %d\n%s%s", code, out, errb)
+	}
+	if fi, _ := os.Lstat(filepath.Join("w", "raw")); fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("la prova ha creato il link")
+	}
+	if code, out, errb = do(t, "-root", "w", "raw", nas, "-apply"); code != 0 {
+		t.Fatalf("apply: exit %d\n%s%s", code, out, errb)
+	}
+	if b, _ := os.ReadFile(filepath.Join(nas, "doc", "vecchio.md")); string(b) != "prima\n" {
+		t.Errorf("originale non copiato: %q", b)
+	}
+	if target, _ := os.Readlink(filepath.Join("w", "raw")); target != nas {
+		t.Errorf("link = %q", target)
+	}
+	backups, _ := filepath.Glob(filepath.Join("w", "raw.local-*", "doc", "vecchio.md"))
+	if len(backups) != 1 {
+		t.Errorf("manca la copia locale: %v", backups)
+	}
+	if code, out, _ = do(t, "-root", "w", "raw", nas); code != 0 || !strings.Contains(out, "è già in") {
+		t.Errorf("secondo giro: %s", out)
+	}
+
+	nuovo := filepath.Join("w", "inbox", "nuovo.md")
+	_ = os.WriteFile(nuovo, []byte("dopo\n"), 0o644)
+	if code, _, errb = do(t, "-root", "w", "extract", nuovo); code != 0 {
+		t.Fatalf("extract remoto: %s", errb)
+	}
+	if _, err := os.Stat(filepath.Join(nas, "doc", "nuovo.md")); err != nil {
+		t.Error("la fonte non è finita nella cartella remota")
+	}
+
+	_ = os.Remove(filepath.Join(nas, ".wizki-raw")) // come un punto di mount vuoto
+	terzo := filepath.Join("w", "inbox", "terzo.md")
+	_ = os.WriteFile(terzo, []byte("ancora\n"), 0o644)
+	if code, _, errb = do(t, "-root", "w", "extract", terzo); code != 6 || !strings.Contains(errb, "montata") {
+		t.Errorf("non montata: exit %d %s", code, errb)
+	}
+	if _, err := os.Stat(terzo); err != nil {
+		t.Error("la fonte doveva restare in inbox")
+	}
+	if code, _, _ = do(t, "-root", "w", "upgrade", "-apply"); code != 6 {
+		t.Errorf("upgrade con raw non montata: exit %d", code)
 	}
 }

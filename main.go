@@ -7,6 +7,7 @@
 //	                                              stampa il path del testo e, sulla riga dopo, l'id (SHA-256, 8 hex)
 //	exit: 0 ok, 1 errore, 2 uso, 3 nessun testo (anche con OCR), 4 OCR non disponibile,
 //	      5 fonte già acquisita (stesso contenuto di un originale in raw/, anche con nome diverso)
+//	      6 raw/ in rete non raggiungibile (condivisione non montata: manca il marcatore .wizki-raw)
 //	wizki [-root library] inbox                    elenca le fonti acquisibili, nell'ordine in cui acquisirle
 //	wizki [-root library] log <ingest|query|lint> <titolo>
 //	wizki [-root library] lint                     controlli di salute (exit 1 se ci sono warn)
@@ -16,6 +17,9 @@
 //	                                              mostra solo cosa farebbe; non tocca le note
 //	wizki [-ocr-lang ita] deps                     controlla le dipendenze (anche le lingue OCR) e propone
 //	                                              il comando per installare ciò che manca (exit 1 se manca)
+//	wizki [-root library] raw <cartella> [-apply]  sposta raw/ in una cartella di rete montata (copia
+//	                                              verificata, raw.local-<data> come backup, raw diventa un
+//	                                              link); senza -apply mostra solo il piano
 //	wizki slug <testo>
 //	wizki init <nome>                              controlla le dipendenze come deps (senza git si ferma), poi
 //	                                              crea la wiki ./<nome>/ (cartelle, .zk/, log.md, overview.md, index.md,
@@ -59,7 +63,7 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(errw, "uso: wizki [-root dir] init|deps|extract|inbox|log|lint|index|upgrade|slug ...")
+		fmt.Fprintln(errw, "uso: wizki [-root dir] init|deps|extract|inbox|log|lint|index|upgrade|raw|slug ...")
 		return 2
 	}
 
@@ -95,6 +99,11 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 		if err == nil && len(missing) > 0 {
 			code = 1
 		}
+	case "raw":
+		err = need(rest, 2, "wizki [-root dir] raw <cartella> [-apply]")
+		if err == nil {
+			err = rawRemote(ctx, *root, rest[1:], out)
+		}
 	case "slug":
 		err = need(rest, 2, "wizki slug <testo>")
 		if err == nil {
@@ -111,6 +120,9 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 		if errors.Is(err, fx.ErrOCRUnavailable) {
 			return 4
 		}
+		if errors.Is(err, fx.ErrRawUnreachable) {
+			return 6
+		}
 		if errors.Is(err, fx.ErrDuplicate) {
 			return 5
 		}
@@ -124,6 +136,10 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 // locali in raw/assets/<stem>/). Stampa il path del testo e l'id.
 // Se qualcosa va storto, la fonte e le sue immagini tornano dov'erano.
 func extract(ctx context.Context, root, src, lang string, noOCR bool, out, errw io.Writer) error {
+	// raw/ in rete: se la condivisione non è montata, non tocco niente
+	if err := fx.CheckRaw(root); err != nil {
+		return err
+	}
 	in := core.SourceInput{Path: src}
 	kind, _ := core.SourceKind(src)
 	switch kind {
@@ -414,6 +430,9 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
 		return fmt.Errorf("%s non sembra una wiki (manca .zk/config.toml): per crearne una usa wizki init", root)
 	}
+	if err := fx.CheckRaw(root); err != nil {
+		return err
+	}
 	files, err := zkFiles()
 	if err != nil {
 		return err
@@ -543,4 +562,108 @@ func orUnknown(manager string) string {
 		return "questo sistema"
 	}
 	return manager
+}
+
+// rawRemote sposta raw/ della wiki in una cartella remota (una condivisione
+// di rete montata): copia verificata degli originali, la cartella locale resta
+// come raw.local-<data>, raw/ diventa un link. Senza -apply mostra il piano.
+func rawRemote(ctx context.Context, root string, args []string, out io.Writer) error {
+	apply, target := false, ""
+	for _, a := range args {
+		switch {
+		case a == "-apply" || a == "--apply":
+			apply = true
+		case target == "" && !strings.HasPrefix(a, "-"):
+			target = a
+		default:
+			return fmt.Errorf("uso: wizki [-root dir] raw <cartella> [-apply]")
+		}
+	}
+	if target == "" {
+		return fmt.Errorf("uso: wizki [-root dir] raw <cartella> [-apply]")
+	}
+	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
+		return fmt.Errorf("%s non sembra una wiki (manca .zk/config.toml)", root)
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	st, err := fx.ReadRawState(root, absTarget)
+	if err != nil {
+		return err
+	}
+	steps, err := core.PlanRaw(st, filepath.Base(absRoot), fx.Today().Format("20060102-150405"))
+	if err != nil {
+		return err
+	}
+	if len(steps) == 0 {
+		fmt.Fprintf(out, "%s/raw è già in %s\n", root, absTarget)
+		return nil
+	}
+	if !apply {
+		fmt.Fprintln(out, "prova: nessuna modifica. Rilancia con -apply per applicare:")
+	}
+	copies := 0
+	for _, s := range steps {
+		if _, ok := s.(core.CopyVerify); ok {
+			copies++
+		}
+	}
+	if copies > 0 || len(st.Same) > 0 {
+		fmt.Fprintf(out, "copia con verifica: %s in %s", core.CountPhrase(copies, "file", "file"), absTarget)
+		if len(st.Same) > 0 {
+			fmt.Fprintf(out, " (%s già lì, uguali)", core.CountPhrase(len(st.Same), "file", "file"))
+		}
+		fmt.Fprintln(out)
+	}
+	for _, s := range steps {
+		switch s := s.(type) {
+		case core.Move:
+			fmt.Fprintf(out, "sposta: %s -> %s (la copia locale resta lì)\n", s.From, s.To)
+		case core.Symlink:
+			fmt.Fprintf(out, "collega: %s -> %s\n", s.Link, s.Target)
+		case core.WriteFile:
+			fmt.Fprintf(out, "crea: %s\n", s.Path)
+		}
+	}
+	if !apply {
+		return nil
+	}
+	var moved *core.Move
+	for _, s := range steps {
+		err := fx.Exec(ctx, s)
+		switch {
+		case err == nil:
+			if m, ok := s.(core.Move); ok {
+				moved = &m
+			}
+			continue
+		case moved == nil:
+			// fallita una copia: la raw locale è intatta, le copie già fatte
+			// al prossimo giro risultano uguali e si saltano
+			return fmt.Errorf("%w (la raw locale non è stata toccata: puoi rilanciare)", err)
+		}
+		if _, ok := s.(core.Symlink); ok {
+			if uerr := fx.Undo(*moved); uerr != nil {
+				return fmt.Errorf("%w; e non riesco a rimettere a posto %s: la raw locale è in %s", err, moved.From, moved.To)
+			}
+			return fmt.Errorf("%w (ho rimesso a posto la raw locale)", err)
+		}
+		return fmt.Errorf("%w (il link è fatto: rilancia lo stesso comando per completare)", err)
+	}
+	if err := fx.CheckRaw(root); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "fatto: %s/raw ora è %s.\n", root, absTarget)
+	for _, s := range steps {
+		if m, ok := s.(core.Move); ok {
+			fmt.Fprintf(out, "Quando hai controllato che i file ci siano tutti, puoi cancellare %s.\n", m.To)
+		}
+	}
+	return nil
 }

@@ -25,7 +25,7 @@ commands, and this guide shows every one of them with real examples.
 - [What your wiki looks like](#what-your-wiki-looks-like)
 - [Before you start](#before-you-start)
 - [The commands at a glance](#the-commands-at-a-glance)
-- [A month with your wiki: twelve scenarios](#a-month-with-your-wiki-twelve-scenarios)
+- [A month with your wiki: thirteen scenarios](#a-month-with-your-wiki-thirteen-scenarios)
 - [When something goes wrong](#when-something-goes-wrong)
 - [The rules your wiki lives by](#the-rules-your-wiki-lives-by)
 - [Glossary](#glossary)
@@ -249,6 +249,7 @@ does.
 | `wizki lint` | Run the automatic part of the check-up | Whenever you like |
 | `wizki upgrade` | Show what's needed to update an older wiki | After installing a newer wizki |
 | `wizki upgrade -apply` | Actually update it | After reading what `upgrade` showed |
+| `wizki raw <folder>` / `raw <folder> -apply` | Move the safe (`raw/`) to a network drive: first show the plan, then do it | When originals take too much space, or should be shared |
 | `wizki slug <text>` | Turn a title into a safe file name | Rarely; mostly used internally |
 
 In the terminal, write `./bin/wizki` instead of just `wizki` (it means "the
@@ -256,7 +257,7 @@ wizki program in the `bin` folder").
 
 ---
 
-## A month with your wiki: twelve scenarios
+## A month with your wiki: thirteen scenarios
 
 Let's follow **Giulia**, a parent representative at her children's school. She
 receives circulars, meeting minutes, notices and newsletters, and she always
@@ -602,7 +603,74 @@ the catalog. **Her pages are never touched.** Running `upgrade` again now says
 `… è già aggiornata` (*… is already up to date*). Older pages may lack newer
 fields, such as the publication date; the next check-up will point them out.
 
-### 12. Small helpers
+### 12. Keeping the originals on the family NAS
+
+After a year, Giulia's wiki holds hundreds of scans and photos, and her laptop
+is running out of space. The family has a **NAS**, a small storage box on the
+home network, which her computer already shows as a folder: `/mnt/nas/wiki`.
+(It's the same for any network folder, as long as the computer shows it as an
+ordinary folder: a NAS, a shared folder on another computer, a remote server
+mounted with sshfs, a cloud drive mounted with rclone.)
+
+She asks wizki to move the safe, `raw/`, there. As always, the first run is
+only a trial:
+
+    ./bin/wizki raw /mnt/nas/wiki
+
+    prova: nessuna modifica. Rilancia con -apply per applicare:
+    copia con verifica: 412 file in /mnt/nas/wiki
+    sposta: library/raw -> library/raw.local-20261108-202121 (la copia locale resta lì)
+    collega: library/raw -> /mnt/nas/wiki
+    crea: /mnt/nas/wiki/.wizki-raw
+
+*(trial run: no changes. Copy with verification: 412 files to /mnt/nas/wiki;
+move: library/raw → library/raw.local-… (the local copy stays there); link:
+library/raw → /mnt/nas/wiki; create: /mnt/nas/wiki/.wizki-raw)*
+
+Then she runs it for real:
+
+    ./bin/wizki raw /mnt/nas/wiki -apply
+
+Here is what wizki does:
+
+1. **It copies every original to the NAS and checks each copy.** It computes the
+   fingerprint of the copy and compares it with the original's, so a file
+   damaged in transit is caught immediately. Files already on the NAS with the
+   same content are skipped. If the NAS already has a file with the same name
+   but different content, wizki stops before copying anything.
+2. **It keeps the old folder** as `raw.local-<date>`. Nothing is deleted. Once
+   Giulia has checked that everything is on the NAS, she can delete that folder
+   herself to free up space.
+3. **It turns `raw` into a shortcut** (a "symbolic link") to the NAS folder. The
+   pages keep saying `raw/pdf/circolare.pdf`, and that path now leads to the NAS.
+   The assistant, Obsidian and every link keep working as before.
+4. **It leaves a small label file**, `.wizki-raw`, in the NAS folder. It records
+   which wiki the folder belongs to, so the same folder can't be used by two
+   wikis by mistake.
+
+From now on, new documents go straight from the inbox to the NAS. They are
+copied, checked, and only then removed from the inbox.
+
+**When the NAS is off.** If the NAS is switched off, or the laptop is away from
+home, the folder `/mnt/nas/wiki` may look empty or be missing. wizki notices
+the label file is missing and **refuses to file anything**, so that nothing
+ends up in the wrong place:
+
+    errore: raw remoto non raggiungibile: in /mnt/nas/wiki manca .wizki-raw: la condivisione è montata? (se è una cartella nuova, configurala con wizki raw)
+
+*(error: remote raw unreachable: .wizki-raw is missing in /mnt/nas/wiki: is the
+share mounted? If it's a new folder, set it up with wizki raw)*
+
+The document simply waits in the inbox. When she's home again, she adds it
+as usual. Reading the wiki, asking questions and running the check-up keep
+working without the NAS, because the pages stay on the laptop. Only the
+originals and their extracted text are on the NAS.
+
+To avoid rereading hundreds of files over the network every time she adds a
+document (to spot duplicates), wizki keeps a small list of fingerprints on the
+laptop and only rereads files that have changed.
+
+### 13. Small helpers
 
 A few commands mostly run behind the scenes, but can be useful by hand.
 
@@ -661,6 +729,7 @@ exactly as it was. Here are the messages you're most likely to meet:
 | `immagini locali non trovate (restano come riferimenti): …` | *Local images not found (left as references).* An article mentions a picture that isn't in the inbox. | Add the picture next to the article and try again, or ignore it. |
 | `… esiste già: raw/ è immutabile, non sovrascrivo` | *Already exists: raw/ cannot be changed, I won't overwrite.* A file with the same name is already in the safe. | Rename the new document and try again. |
 | `manca git, che serve a init: installalo e rilancia (non ho creato nulla)` | *git is missing, and init needs it: install it and try again (nothing was created).* | Install git (`wizki deps` shows the command), then run `init` again. |
+| `raw remoto non raggiungibile: … la condivisione è montata?` | *Remote raw unreachable: is the share mounted?* The network folder holding the originals isn't available. Nothing was moved. | Switch on or connect the NAS (or reconnect to the network), then try again. |
 | `… non sembra una wiki (manca .zk/config.toml): per crearne una usa wizki init` | *This doesn't look like a wiki.* `upgrade` was pointed at the wrong folder. | Check the `-root` name; use `init` for a brand-new wiki. |
 
 ---
@@ -722,6 +791,7 @@ Every command, with its options:
     wizki [-root library] lint
     wizki [-root library] index
     wizki [-root library] upgrade [-apply]
+    wizki [-root library] raw <folder> [-apply]
     wizki slug <text>
     wizki [-ocr-lang ita] deps
     wizki [-ocr-lang ita] init <name>
@@ -742,7 +812,8 @@ What `extract` accepts, and where each kind of file goes:
 | Data | `.csv` `.tsv` `.json` | `raw/data/` | the content |
 
 Exit codes (useful in scripts): 0 ok; 1 error, warnings from `lint`, or programs missing for `deps`; 2 wrong
-usage; 3 no text (even with OCR); 4 OCR not available; 5 source already added.
+usage; 3 no text (even with OCR); 4 OCR not available; 5 source already added;
+6 network `raw/` unreachable.
 
 wizki is written in Go, with no dependencies beyond the standard library. It
 calls `pdftotext`, `pdftoppm`, `tesseract`, `zk` and `git` when needed. The
