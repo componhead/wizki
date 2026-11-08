@@ -1,0 +1,32 @@
+# Notebook zk per la wiki. Chiavi verificate sul sorgente di zk-org/zk.
+# Dopo `zk init`, `zk list` non deve mostrare raw/.
+
+[note]
+language = "it"
+default-title = "Senza titolo"
+filename = "{{format-date now '%Y%m%d'}}-{{slug title}}"
+extension = "md"
+template = "source.md"
+exclude = ["raw/**", "log.md"]
+
+[group.sources]
+paths = ["sources"]
+
+[group.topics]
+paths = ["topics"]
+
+[group.topics.note]
+# L'hub si chiama come il topic, senza data: [[scuola]] -> topics/scuola.md
+filename = "{{slug title}}"
+template = "topic.md"
+
+[format.markdown]
+link-format = "wiki"
+hashtags = true
+
+[alias]
+topics   = "zk tag list $@"
+orphans  = "zk list --orphan $@"
+untagged = "zk list --tagless $@"
+by       = "zk list --tag $@"
+hist     = "zk list --format path --delimiter0 --quiet $@ | xargs -t -0 git log --patch --"
