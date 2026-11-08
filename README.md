@@ -216,8 +216,16 @@ If your wiki reads documents in other languages too, include them:
 
 ### A word about language
 
-wizki talks to you in **Italian**. In this guide, its messages are shown exactly
-as they appear, followed by a translation.
+wizki speaks **Italian** or **English**, and so does each wiki. A wiki gets its
+language when it is created (`wizki init <name> --locale en`, Italian if you
+don't say), and keeps it: the templates, the overview, the catalog, the check-up
+messages and everything wizki prints follow it. The language is written in the
+wiki's settings (`language` in `.zk/config.toml`), so later commands find it on
+their own. For commands that don't work on a wiki (`deps`, `slug`) choose it with
+`-locale en`, or once for the session with `WIKI_LOCALE=en`.
+
+`library/` is an Italian wiki, so in this guide wizki's messages are shown
+exactly as they appear, followed by a translation.
 
 ---
 
@@ -241,7 +249,7 @@ does.
 | Command | In plain words | When |
 |---|---|---|
 | `wizki deps` | Check that the programs wizki needs are installed, and offer to install what's missing | Right after building wizki, or when something doesn't work |
-| `wizki init <name>` | Create a new, empty wiki (checking the programs first) | Starting a new subject area |
+| `wizki init <name> [--locale it\|en]` | Create a new, empty wiki in Italian or English (checking the programs first) | Starting a new subject area |
 | `wizki inbox` | List what's waiting in the inbox, in the right order | Before adding documents |
 | `wizki extract <file>` | Put a document in the safe and pull its text out | First step of every addition |
 | `wizki index` | Rebuild the catalog of all pages | After pages change |
@@ -566,6 +574,12 @@ history (it is a separate git repository). Running `init` again never overwrites
 anything: it only fills in what's missing, and says `già presente` (*already
 there*) for the rest.
 
+A wiki can also be in English: `./bin/wizki init japan-trip --locale en` creates
+the same layout with English templates (`## Summary`, `## See also`, `type:` for
+entities…), an English overview and catalog, and wizki then talks English
+whenever it works on it. Running `init` again on an existing wiki keeps its
+language; asking for a different one with `--locale` is refused.
+
 To work on this wiki instead of `library/`, every command gets `-root`:
 
     ./bin/wizki -root viaggio-giappone inbox
@@ -792,15 +806,19 @@ Every command, with its options:
     wizki [-root library] index
     wizki [-root library] upgrade [-apply]
     wizki [-root library] raw <folder> [-apply]
-    wizki slug <text>
-    wizki [-ocr-lang ita] deps
-    wizki [-ocr-lang ita] init <name>
+    wizki [-locale it|en] slug <text>
+    wizki [-locale it|en] [-ocr-lang ita] deps
+    wizki [-ocr-lang ita] init <name> [--locale it|en]
 
 - `-root`: which wiki to work on (default `library`); can also be set with the
   `WIKI_ROOT` environment variable.
 - `-ocr-lang`: OCR language(s), e.g. `ita`, `eng`, `ita+eng` (default `ita`);
   can also be set with `WIKI_OCR_LANG`.
 - `-no-ocr`: never try OCR.
+- `-locale`: wizki's language (`it`, default, or `en`) for commands without a
+  wiki and for new wikis; can also be set with `WIKI_LOCALE`. A command working
+  on an existing wiki always uses that wiki's language.
+- `--locale` after `init <name>`: the new wiki's language.
 
 What `extract` accepts, and where each kind of file goes:
 
@@ -817,8 +835,10 @@ usage; 3 no text (even with OCR); 4 OCR not available; 5 source already added;
 
 wizki is written in Go, with no dependencies beyond the standard library. It
 calls `pdftotext`, `pdftoppm`, `tesseract`, `zk` and `git` when needed. The
-code is split into `core/` (pure logic, fully tested) and `fx/` (everything that
-touches files and other programs). Run the tests with `go test ./...`.
+code is split into `core/` (pure logic, fully tested), `fx/` (everything that
+touches files and other programs) and `i18n/` (the dictionary: every text wizki
+prints or writes, one struct per language). The zk settings and templates for
+Italian are `library/.zk/`; for English, `locales/en/zk/`. Run the tests with `go test ./...`.
 
 ---
 

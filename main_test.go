@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wizki/core"
+	"wizki/i18n"
 )
 
 // fakeBin installa in PATH un eseguibile finto.
@@ -22,6 +25,7 @@ func fakeBin(t *testing.T, name, script string) {
 
 func do(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
+	t.Setenv("WIKI_LOCALE", "") // i test si aspettano l'italiano, salvo -locale
 	var out, errb bytes.Buffer
 	code := run(context.Background(), args, &out, &errb)
 	return code, out.String(), errb.String()
@@ -771,5 +775,111 @@ func TestRawRemota(t *testing.T) {
 	}
 	if code, _, _ = do(t, "-root", "w", "upgrade", "-apply"); code != 6 {
 		t.Errorf("upgrade con raw non montata: exit %d", code)
+	}
+}
+
+// TestInitLocaleEn: `init <nome> --locale en` crea una wiki tutta in inglese
+// (config e template zk, panoramica, indice, messaggi), e i comandi successivi
+// la riconoscono dalla config senza bisogno di flag.
+func TestInitLocaleEn(t *testing.T) {
+	t.Chdir(t.TempDir())
+	code, out, errb := do(t, "init", "mine", "--locale", "en")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	if !strings.Contains(out, `wiki "mine" ready`) || !strings.Contains(out, "created: mine/log.md") {
+		t.Errorf("out = %s", out)
+	}
+	for rel, src := range map[string]string{
+		".zk/config.toml":         "locales/en/zk/config.toml",
+		".zk/templates/entity.md": "locales/en/zk/templates/entity.md",
+	} {
+		got, _ := os.ReadFile(filepath.Join("mine", rel))
+		want, _ := zkConfig.ReadFile(src)
+		if len(want) == 0 || !bytes.Equal(got, want) {
+			t.Errorf("%s diverso da %s", rel, src)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join("mine", "overview.md")); !strings.Contains(string(b), "## Open questions") {
+		t.Errorf("overview.md = %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join("mine", "index.md")); !strings.Contains(string(b), "## Topics (0)\n\n_(no pages)_") {
+		t.Errorf("index.md = %q", b)
+	}
+	// i comandi sulla wiki parlano inglese anche senza flag
+	_ = os.WriteFile(filepath.Join("mine", "sources", "a.md"), []byte("---\ntitle: A\nsummary: s\npublished: unknown\n---\n"), 0o644)
+	fakeBin(t, "zk", `exit 0`)
+	code, out, _ = do(t, "-root", "mine", "lint")
+	if code != 1 || !strings.Contains(out, "index.md: out of date: run `wizki index`") || strings.Contains(out, "published:") {
+		t.Errorf("lint: exit %d\n%s", code, out)
+	}
+	if code, out, _ = do(t, "-root", "mine", "upgrade"); code != 0 || !strings.Contains(out, "is already up to date") {
+		t.Errorf("upgrade: exit %d\n%s", code, out)
+	}
+	// rilanciata senza --locale, init completa la wiki nella sua lingua
+	_ = os.Remove(filepath.Join("mine", ".zk", "templates", "topic.md"))
+	if code, out, errb = do(t, "init", "mine"); code != 0 || !strings.Contains(out, "already there: mine/log.md") {
+		t.Fatalf("seconda init: exit %d\n%s%s", code, out, errb)
+	}
+	got, _ := os.ReadFile(filepath.Join("mine", ".zk", "templates", "topic.md"))
+	if want, _ := zkConfig.ReadFile("locales/en/zk/templates/topic.md"); !bytes.Equal(got, want) {
+		t.Errorf("topic.md ricreato in un'altra lingua: %q", got)
+	}
+}
+
+// TestInitLocaleConflitto: una wiki in inglese non si completa in italiano.
+func TestInitLocaleConflitto(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, errb := do(t, "init", "--locale=en", "mine"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	code, _, errb := do(t, "init", "mine", "--locale", "it")
+	if code != 1 || !strings.Contains(errb, `è una wiki in lingua "en"`) {
+		t.Errorf("exit %d: %s", code, errb)
+	}
+}
+
+// TestLocaleSconosciuta: una lingua che non c'è è un errore, prima di creare qualcosa.
+func TestLocaleSconosciuta(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, errb := do(t, "init", "w", "--locale", "fr"); code != 1 || !strings.Contains(errb, `"fr" non disponibile`) {
+		t.Errorf("init: exit %d: %s", code, errb)
+	}
+	if _, err := os.Stat("w"); err == nil {
+		t.Error("creata la wiki con una lingua sconosciuta")
+	}
+	if code, _, errb := do(t, "-locale", "fr", "deps"); code != 2 || !strings.Contains(errb, "fr") {
+		t.Errorf("-locale fr: exit %d: %s", code, errb)
+	}
+	if code, _, errb := do(t, "init", "w", "--locale"); code != 1 || !strings.Contains(errb, "uso: wizki init") {
+		t.Errorf("--locale senza valore: exit %d: %s", code, errb)
+	}
+}
+
+// TestLocaleGlobaleSenzaWiki: -locale vale per i comandi che non hanno una wiki.
+func TestLocaleGlobaleSenzaWiki(t *testing.T) {
+	if code, _, errb := do(t, "-locale", "en", "boh"); code != 1 || !strings.Contains(errb, `error: unknown command "boh"`) {
+		t.Errorf("exit %d: %s", code, errb)
+	}
+}
+
+// TestZkDirsCompleti: ogni lingua del dizionario ha la sua configurazione zk,
+// con gli stessi file.
+func TestZkDirsCompleti(t *testing.T) {
+	ref, err := zkFiles(i18n.DefaultCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range i18n.Codes() {
+		files, err := zkFiles(code)
+		if err != nil {
+			t.Fatalf("%s: %v", code, err)
+		}
+		if len(files) != len(ref) {
+			t.Errorf("%s: %d file, in %s %d", code, len(files), i18n.DefaultCode, len(ref))
+		}
+		if lang := core.ConfigLanguage(string(files[filepath.Join(".zk", "config.toml")])); lang != code {
+			t.Errorf("%s: language = %q nella config", code, lang)
+		}
 	}
 }

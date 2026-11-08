@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"wizki/i18n"
 )
 
 // TestWikiLinks: destinazioni normalizzate (senza .md né titolo), distinte, in ordine.
@@ -223,5 +225,39 @@ func TestAnalysisFindings(t *testing.T) {
 	}
 	if got[1] != (Finding{"warn", "analyses/2026-02-01-vuota.md", "analisi senza link a fonti, topic o entità"}) {
 		t.Errorf("warn: %v", got[1])
+	}
+}
+
+// TestBuildIndexEn: l'indice segue la lingua corrente; type: vale come tipo:.
+func TestBuildIndexEn(t *testing.T) {
+	defer i18n.Use(i18n.T())
+	i18n.Use(&i18n.EN)
+	pages := []Page{
+		ParsePage("entities/rome.md", "---\ntitle: Rome\ntype: place\nsummary: city\n---\n"),
+		ParsePage("sources/a.md", "---\ntitle: A\nsummary: s\ndate: 2026-01-01\n---\n[[entities/rome|Rome]]\n"),
+	}
+	got := BuildIndex(pages)
+	for _, want := range []string{"# Index\n", "## Entities (1)\n\n### place\n", "· 1 source", "publ. ? · ingested 2026-01-01", "## Analyses (0)\n\n_(no pages)_"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("manca %q in:\n%s", want, got)
+		}
+	}
+	if !ValidPublished("unknown") || ValidPublished("sconosciuta") {
+		t.Error("in inglese la data sconosciuta è \"unknown\"")
+	}
+}
+
+// TestConfigLanguage: language letta solo dalla sezione [note], commenti a parte.
+func TestConfigLanguage(t *testing.T) {
+	cases := map[string]string{
+		"[note]\nlanguage = \"en\"\n":                       "en",
+		"# x\n[note]\nlanguage = 'it' # commento\n":         "it",
+		"[format]\nlanguage = \"fr\"\n[note]\ntemplate = 1": "",
+		"": "",
+	}
+	for in, want := range cases {
+		if got := ConfigLanguage(in); got != want {
+			t.Errorf("ConfigLanguage(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

@@ -13,13 +13,14 @@ import (
 	"time"
 
 	"wizki/core"
+	"wizki/i18n"
 )
 
 // ErrNoText: il PDF non ha livello di testo (probabile scansione).
-var ErrNoText = errors.New("nessun testo estratto dal PDF")
+var ErrNoText error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrNoText })
 
 // ErrExists: il file (o il repository git) da creare c'è già; non lo tocco.
-var ErrExists = errors.New("esiste già")
+var ErrExists error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrExists })
 
 // Exec esegue un singolo passo del piano.
 func Exec(ctx context.Context, s core.Step) error {
@@ -28,7 +29,7 @@ func Exec(ctx context.Context, s core.Step) error {
 		return os.MkdirAll(s.Path, 0o755)
 	case core.Move:
 		if _, err := os.Stat(s.To); err == nil {
-			return fmt.Errorf("%s esiste già: raw/ è immutabile, non sovrascrivo", s.To)
+			return fmt.Errorf(i18n.T().RawImmutable, s.To)
 		}
 		return moveFile(s.From, s.To)
 	case core.Extract:
@@ -74,7 +75,7 @@ func Exec(ctx context.Context, s core.Step) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("passo sconosciuto %T", s)
+		return fmt.Errorf(i18n.T().UnknownStep, s)
 	}
 }
 
@@ -212,7 +213,7 @@ func replaceWithBackup(s core.Replace) error {
 		return err
 	}
 	if err := Exec(context.Background(), core.WriteFile{Path: s.Backup, Data: cur}); err != nil {
-		return fmt.Errorf("copia di sicurezza: %w", err)
+		return fmt.Errorf(i18n.T().BackupCopy, err)
 	}
 	return WriteGenerated(s.Path, string(s.Data))
 }

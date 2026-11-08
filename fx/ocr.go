@@ -10,16 +10,17 @@ import (
 	"strings"
 
 	"wizki/core"
+	"wizki/i18n"
 )
 
 // ErrOCRUnavailable: mancano pdftoppm, tesseract o il pacchetto lingua.
-var ErrOCRUnavailable = errors.New("OCR non disponibile")
+var ErrOCRUnavailable error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrOCRUnavailable })
 
 // CheckOCR verifica comandi e lingue PRIMA di toccare qualsiasi file.
 func CheckOCR(ctx context.Context, lang string) error {
 	for _, bin := range []string{"pdftoppm", "tesseract"} {
 		if _, err := exec.LookPath(bin); err != nil {
-			return fmt.Errorf("%w: manca %s (servono poppler e tesseract)", ErrOCRUnavailable, bin)
+			return fmt.Errorf(i18n.T().OCRMissingBin, ErrOCRUnavailable, bin)
 		}
 	}
 	out, err := exec.CommandContext(ctx, "tesseract", "--list-langs").CombinedOutput()
@@ -27,7 +28,7 @@ func CheckOCR(ctx context.Context, lang string) error {
 		return fmt.Errorf("%w: tesseract --list-langs: %v", ErrOCRUnavailable, err)
 	}
 	if miss := core.MissingLangs(core.ParseLangs(string(out)), lang); len(miss) > 0 {
-		return fmt.Errorf("%w: manca il pacchetto lingua %s di Tesseract", ErrOCRUnavailable, strings.Join(miss, ", "))
+		return fmt.Errorf(i18n.T().OCRMissingLang, ErrOCRUnavailable, strings.Join(miss, ", "))
 	}
 	return nil
 }
@@ -59,7 +60,7 @@ func execOCR(ctx context.Context, s core.OCR) error {
 		return err
 	}
 	if len(imgs) == 0 {
-		return errors.New("pdftoppm non ha prodotto nessuna pagina")
+		return errors.New(i18n.T().NoPages)
 	}
 	var texts []string
 	for _, img := range core.SortPages(imgs) {
@@ -80,14 +81,14 @@ func execOCR(ctx context.Context, s core.OCR) error {
 // delle immagini, che non passa da pdftoppm.
 func CheckTesseract(ctx context.Context, lang string) error {
 	if _, err := exec.LookPath("tesseract"); err != nil {
-		return fmt.Errorf("%w: manca tesseract", ErrOCRUnavailable)
+		return fmt.Errorf(i18n.T().OCRMissingTesseract, ErrOCRUnavailable)
 	}
 	out, err := exec.CommandContext(ctx, "tesseract", "--list-langs").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: tesseract --list-langs: %v", ErrOCRUnavailable, err)
 	}
 	if miss := core.MissingLangs(core.ParseLangs(string(out)), lang); len(miss) > 0 {
-		return fmt.Errorf("%w: manca il pacchetto lingua %s di Tesseract", ErrOCRUnavailable, strings.Join(miss, ", "))
+		return fmt.Errorf(i18n.T().OCRMissingLang, ErrOCRUnavailable, strings.Join(miss, ", "))
 	}
 	return nil
 }
@@ -102,7 +103,7 @@ func execImageText(ctx context.Context, s core.ImageText) error {
 			return stderrOf("tesseract", err)
 		}
 		if t := strings.TrimSpace(string(out)); t != "" {
-			text += "\n## Testo (OCR)\n\n" + t + "\n"
+			text += "\n" + i18n.T().OCRHeading + "\n\n" + t + "\n"
 		}
 	}
 	return Exec(ctx, core.WriteFile{Path: s.Out, Data: []byte(text)})

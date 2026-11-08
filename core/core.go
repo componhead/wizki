@@ -1,13 +1,18 @@
 // Package core contiene solo funzioni pure: nessun I/O, nessun orologio,
 // nessun processo esterno. Tutto ciò che tocca il mondo sta in package fx.
+// I testi (messaggi, pagine generate) vengono dal dizionario della lingua
+// corrente, i18n.T(), scelta una volta all'avvio.
 package core
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"wizki/i18n"
 )
 
 // ---------------------------------------------------------------- helpers
@@ -118,11 +123,11 @@ func IsPDF(name string) bool { return strings.EqualFold(filepath.Ext(name), ".pd
 func PlanExtract(root, pdfPath string) ([]Step, error) {
 	base := filepath.Base(pdfPath)
 	if !IsPDF(base) {
-		return nil, fmt.Errorf("%q non è un PDF", base)
+		return nil, fmt.Errorf(i18n.T().NotPDF, base)
 	}
 	stem := Slug(strings.TrimSuffix(base, filepath.Ext(base)))
 	if stem == "" {
-		return nil, fmt.Errorf("nome file %q non utilizzabile", base)
+		return nil, fmt.Errorf(i18n.T().BadFileName, base)
 	}
 	pdfDir := filepath.Join(root, "raw", "pdf")
 	txtDir := filepath.Join(root, "raw", "text")
@@ -143,11 +148,11 @@ var logKinds = map[string]bool{"ingest": true, "query": true, "lint": true}
 // analizzabile con `grep "^## \[" log.md | tail -5`.
 func LogLine(day time.Time, kind, title string) (string, error) {
 	if !logKinds[kind] {
-		return "", fmt.Errorf("tipo di log %q sconosciuto (ingest|query|lint)", kind)
+		return "", fmt.Errorf(i18n.T().UnknownLogKind, kind)
 	}
 	t := strings.Join(strings.Fields(title), " ")
 	if t == "" {
-		return "", fmt.Errorf("titolo vuoto")
+		return "", errors.New(i18n.T().EmptyTitle)
 	}
 	return fmt.Sprintf("## [%s] %s | %s\n", day.Format("2006-01-02"), kind, t), nil
 }
@@ -166,16 +171,16 @@ type TopicView struct {
 func TopicFindings(v TopicView) []Finding {
 	var fs []Finding
 	for _, p := range Diff(v.Tagged, v.Linked) {
-		fs = append(fs, Finding{"warn", v.Topic, fmt.Sprintf("%s ha il tag ma non linka [[topics/%s]]", p, v.Topic)})
+		fs = append(fs, Finding{"warn", v.Topic, fmt.Sprintf(i18n.T().TagNoLink, p, v.Topic)})
 	}
 	for _, p := range Diff(v.Linked, v.Tagged) {
-		fs = append(fs, Finding{"warn", v.Topic, fmt.Sprintf("%s linka [[topics/%s]] ma non ha il tag", p, v.Topic)})
+		fs = append(fs, Finding{"warn", v.Topic, fmt.Sprintf(i18n.T().LinkNoTag, p, v.Topic)})
 	}
 	switch unionSize(v.Tagged, v.Linked) {
 	case 0:
-		fs = append(fs, Finding{"info", v.Topic, "topic senza fonti"})
+		fs = append(fs, Finding{"info", v.Topic, i18n.T().TopicNoSources})
 	case 1:
-		fs = append(fs, Finding{"info", v.Topic, "una sola fonte"})
+		fs = append(fs, Finding{"info", v.Topic, i18n.T().TopicOneSource})
 	}
 	return fs
 }
@@ -192,7 +197,7 @@ func NearDuplicates(topics []string) []Finding {
 				limit = 2
 			}
 			if lev(ts[i], ts[j]) <= limit {
-				fs = append(fs, Finding{"warn", ts[i] + " ~ " + ts[j], "possibile plurale o sinonimo: unificare?"})
+				fs = append(fs, Finding{"warn", ts[i] + " ~ " + ts[j], i18n.T().NearDuplicate})
 			}
 		}
 	}
@@ -201,7 +206,7 @@ func NearDuplicates(topics []string) []Finding {
 
 func Orphans(paths []string) []Finding {
 	return Map(paths, func(p string) Finding {
-		return Finding{"warn", p, "nessun link in entrata"}
+		return Finding{"warn", p, i18n.T().Orphan}
 	})
 }
 
@@ -285,7 +290,7 @@ func IDFindings(ids map[string]string) []Finding {
 	var fs []Finding
 	for p, id := range ids {
 		if id == "" {
-			fs = append(fs, Finding{"warn", p, "id mancante nel frontmatter"})
+			fs = append(fs, Finding{"warn", p, i18n.T().IDMissing})
 			continue
 		}
 		byID[id] = append(byID[id], p)
@@ -293,7 +298,7 @@ func IDFindings(ids map[string]string) []Finding {
 	for id, ps := range byID {
 		if len(ps) > 1 {
 			sort.Strings(ps)
-			fs = append(fs, Finding{"warn", "id " + id, "stesso PDF in più note: " + strings.Join(ps, ", ")})
+			fs = append(fs, Finding{"warn", "id " + id, fmt.Sprintf(i18n.T().IDDuplicate, strings.Join(ps, ", "))})
 		}
 	}
 	sort.Slice(fs, func(i, j int) bool { return fs[i].Subject < fs[j].Subject })

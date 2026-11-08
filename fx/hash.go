@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 
 	"wizki/core"
+	"wizki/i18n"
 )
 
 // ErrDuplicate: la fonte ha lo stesso contenuto di un originale già in raw/.
-var ErrDuplicate = errors.New("fonte già acquisita")
+var ErrDuplicate error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrDuplicate })
 
 // HashFile restituisce lo SHA-256 esadecimale del contenuto del file.
 func HashFile(path string) (string, error) {

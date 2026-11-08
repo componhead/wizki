@@ -1,10 +1,13 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"wizki/i18n"
 )
 
 // WriteFile crea un file nuovo con il contenuto dato; non sovrascrive mai.
@@ -42,13 +45,13 @@ var WikiDirs = []string{
 func ValidWikiName(name string) error {
 	switch {
 	case strings.TrimSpace(name) == "":
-		return fmt.Errorf("nome della wiki vuoto")
+		return errors.New(i18n.T().WikiNameEmpty)
 	case name == "." || name == "..":
-		return fmt.Errorf("nome della wiki %q non valido", name)
+		return fmt.Errorf(i18n.T().WikiNameInvalid, name)
 	case strings.ContainsAny(name, `/\`):
-		return fmt.Errorf("nome della wiki %q non valido: niente separatori di path", name)
+		return fmt.Errorf(i18n.T().WikiNameSeparator, name)
 	case strings.HasPrefix(name, "-"):
-		return fmt.Errorf("nome della wiki %q non valido: non può iniziare con '-'", name)
+		return fmt.Errorf(i18n.T().WikiNameDash, name)
 	}
 	return nil
 }
@@ -111,4 +114,25 @@ func Layout(root, logName string, zkFiles map[string][]byte) []Step {
 		WriteFile{Path: filepath.Join(root, IndexPath), Data: []byte(BuildIndex([]Page{ParsePage(OverviewPath, string(OverviewPage()))}))},
 		WriteFile{Path: filepath.Join(root, ".gitignore"), Data: WikiGitignore},
 	)
+}
+
+// ConfigLanguage legge il campo language della sezione [note] di una
+// .zk/config.toml: è la lingua della wiki. "" se manca.
+func ConfigLanguage(config string) string {
+	section := ""
+	for l := range strings.SplitSeq(strings.ReplaceAll(config, "\r\n", "\n"), "\n") {
+		l = strings.TrimSpace(l)
+		if i := strings.Index(l, "#"); i >= 0 && !strings.Contains(l[:i], `"`) {
+			l = strings.TrimSpace(l[:i])
+		}
+		if strings.HasPrefix(l, "[") && strings.HasSuffix(l, "]") {
+			section = strings.TrimSpace(strings.Trim(l, "[]"))
+			continue
+		}
+		k, v, ok := strings.Cut(l, "=")
+		if ok && section == "note" && strings.TrimSpace(k) == "language" {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
 }

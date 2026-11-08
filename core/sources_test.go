@@ -127,10 +127,3 @@ func TestInboxOrder(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
-
-// TestCountPhrase: singolare e plurale.
-func TestCountPhrase(t *testing.T) {
-	if CountPhrase(1, "a", "b") != "1 a" || CountPhrase(3, "a", "b") != "3 b" {
-		t.Error("CountPhrase sbagliato")
-	}
-}

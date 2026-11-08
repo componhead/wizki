@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"wizki/i18n"
 )
 
 // ---------------------------------------------------------- raw remoto
@@ -67,10 +69,10 @@ type RawState struct {
 // il marcatore. Se raw/ punta già lì, il piano è vuoto.
 func PlanRaw(st RawState, wiki, stamp string) ([]Step, error) {
 	if !filepath.IsAbs(st.Target) {
-		return nil, fmt.Errorf("la cartella remota deve essere un path assoluto: %q", st.Target)
+		return nil, fmt.Errorf(i18n.T().RawTargetNotAbs, st.Target)
 	}
 	if st.MarkerWiki != "" && st.MarkerWiki != wiki {
-		return nil, fmt.Errorf("%s è già la cartella raw della wiki %q: scegline un'altra", st.Target, st.MarkerWiki)
+		return nil, fmt.Errorf(i18n.T().RawTargetTaken, st.Target, st.MarkerWiki)
 	}
 	link := filepath.Join(st.Root, "raw")
 	if st.LinkTo != "" {
@@ -80,7 +82,7 @@ func PlanRaw(st RawState, wiki, stamp string) ([]Step, error) {
 			}
 			return nil, nil
 		}
-		return nil, fmt.Errorf("%s punta già a %s: per cambiarla sposta i file e il link a mano", link, st.LinkTo)
+		return nil, fmt.Errorf(i18n.T().RawLinkedElsewhere, link, st.LinkTo)
 	}
 	if len(st.Conflict) > 0 {
 		var cs []string
@@ -88,7 +90,7 @@ func PlanRaw(st RawState, wiki, stamp string) ([]Step, error) {
 			cs = append(cs, c)
 		}
 		sort.Strings(cs)
-		return nil, fmt.Errorf("nella destinazione ci sono file con lo stesso nome ma contenuto diverso: %s", strings.Join(cs, ", "))
+		return nil, fmt.Errorf(i18n.T().RawConflicts, strings.Join(cs, ", "))
 	}
 	var steps []Step
 	files := append([]string{}, st.Local...)

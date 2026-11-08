@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"html"
 	"net/url"
@@ -9,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"wizki/i18n"
 )
 
 // ---------------------------------------------------------------- tipi
@@ -67,7 +68,7 @@ func isHTML(name string) bool {
 }
 
 // ErrEmpty: una fonte di testo o di dati senza contenuto.
-var ErrEmpty = errors.New("nessun testo nella fonte")
+var ErrEmpty error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrEmpty })
 
 // ---------------------------------------------------------------- passi
 
@@ -103,7 +104,7 @@ func PlanSource(root string, in SourceInput) ([]Step, error) {
 	base := filepath.Base(in.Path)
 	kind, ok := SourceKind(base)
 	if !ok {
-		return nil, fmt.Errorf("%q: tipo non supportato (estensioni: %s)", base, strings.Join(SupportedExts(), " "))
+		return nil, fmt.Errorf(i18n.T().Unsupported, base, strings.Join(SupportedExts(), " "))
 	}
 	if kind == KindPDF {
 		return PlanExtract(root, in.Path)
@@ -111,7 +112,7 @@ func PlanSource(root string, in SourceInput) ([]Step, error) {
 	ext := filepath.Ext(base)
 	stem := Slug(strings.TrimSuffix(base, ext))
 	if stem == "" {
-		return nil, fmt.Errorf("nome file %q non utilizzabile", base)
+		return nil, fmt.Errorf(i18n.T().BadFileName, base)
 	}
 	rawDir := filepath.Join(root, "raw", rawDirOf[kind])
 	txtDir := filepath.Join(root, "raw", "text")
@@ -426,12 +427,4 @@ func InboxOrder(names []string, attached map[string]bool) []string {
 		return out[i] < out[j]
 	})
 	return out
-}
-
-// CountPhrase: "1 immagine remota", "3 immagini remote".
-func CountPhrase(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return fmt.Sprintf("%d %s", n, many)
 }

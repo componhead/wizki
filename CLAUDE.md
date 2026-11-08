@@ -41,9 +41,21 @@ Una nuova wiki si crea con `./bin/wizki init <nome>`. Prima controlla le dipende
 comando per installarlo con il gestore di pacchetti (pacman, apt, dnf, brew),
 chiedendo conferma prima di lanciarlo; senza git si ferma. Lo stesso controllo si
 fa in ogni momento con `./bin/wizki deps`. Poi crea `./<nome>/` con questa
-struttura (un `.gitkeep` per cartella, `overview.md` vuota, `index.md` iniziale), `.zk/` (config e template copiati da `library/.zk/`), `.gitignore`
+struttura (un `.gitkeep` per cartella, `overview.md` vuota, `index.md` iniziale), `.zk/` (config e template della lingua scelta), `.gitignore`
 e un repository git (`git init -b master`). Non sovrascrive nulla: rilanciarlo
 completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`).
+
+La lingua si sceglie alla creazione: `./bin/wizki init <nome> --locale en` (default
+`it`). Vale per tutto: config e template zk (in inglese da `locales/en/zk/`, in
+italiano da `library/.zk/`), `overview.md`, `index.md`, i valori fissi (`type:` con `zk new entities ... --extra type=<tipo>`,
+e `person`, `place`… per le entità, `published: unknown`), i messaggi di lint e
+della CLI. È scritta in `.zk/config.toml` (`language`), quindi gli altri comandi
+la rileggono da soli; rilanciare `init` senza `--locale` la mantiene, con una
+`--locale` diversa si ferma. In una wiki inglese i nomi delle sezioni e i tipi
+delle entità di questo schema vanno tradotti (Riassunto → Summary, Nelle fonti →
+In the sources, Vedi anche → See also, Domande aperte → Open questions…). I testi
+stanno nel dizionario `i18n/dict.go`. `-locale` (o `WIKI_LOCALE`) sceglie la lingua
+dei comandi senza wiki (`deps`, `slug`).
 
 Per portare una wiki creata con una versione precedente al layout attuale:
 `./bin/wizki -root <nome> upgrade` mostra cosa farebbe, `upgrade -apply` lo fa.
@@ -263,9 +275,21 @@ A new wiki is created with `./bin/wizki init <name>`. It first checks the depend
 proposes the command to install it with the package manager (pacman, apt, dnf, brew),
 asking for confirmation before running it; without git it stops. The same check
 can be run at any time with `./bin/wizki deps`. Then it creates `./<name>/` with this
-layout (a `.gitkeep` per folder, an empty `overview.md`, an initial `index.md`), `.zk/` (config and templates copied from `library/.zk/`), `.gitignore`
+layout (a `.gitkeep` per folder, an empty `overview.md`, an initial `index.md`), `.zk/` (config and templates of the chosen language), `.gitignore`
 and a git repository (`git init -b master`). It never overwrites anything: running it
 again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_ROOT`).
+
+The language is chosen at creation: `./bin/wizki init <name> --locale en` (default
+`it`). It covers everything: zk config and templates (English from `locales/en/zk/`,
+Italian from `library/.zk/`), `overview.md`, `index.md`, fixed values (`type:` with `zk new entities ... --extra type=<type>`,
+and `person`, `place`… for entities, `published: unknown`), lint and CLI
+messages. It is stored in `.zk/config.toml` (`language`), so the other commands
+read it on their own; running `init` again without `--locale` keeps it, a
+different `--locale` makes it stop. In an English wiki, the section names and
+entity types of this schema must be translated (Riassunto → Summary, Nelle fonti →
+In the sources, Vedi anche → See also, Domande aperte → Open questions…). The texts
+live in the `i18n/dict.go` dictionary. `-locale` (or `WIKI_LOCALE`) picks the
+language of commands without a wiki (`deps`, `slug`).
 
 To bring a wiki created with an earlier version up to the current layout:
 `./bin/wizki -root <name> upgrade` shows what it would do, `upgrade -apply` does it.

@@ -12,11 +12,12 @@ import (
 	"syscall"
 
 	"wizki/core"
+	"wizki/i18n"
 )
 
 // ErrRawUnreachable: raw/ è un link a una cartella remota che ora non si
 // raggiunge (condivisione non montata, rete assente).
-var ErrRawUnreachable = errors.New("raw remoto non raggiungibile")
+var ErrRawUnreachable error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrRawUnreachable })
 
 // moveFile sposta un file. Tra dischi diversi (per esempio dalla inbox locale
 // a raw/ su una condivisione di rete) rename non funziona: copia, verifica lo
@@ -56,16 +57,16 @@ func copyVerify(from, to string) error {
 	_, cerr := io.Copy(dst, io.TeeReader(src, h))
 	if err := errors.Join(cerr, dst.Sync(), dst.Close()); err != nil {
 		_ = os.Remove(to)
-		return fmt.Errorf("copia di %s: %w", from, err)
+		return fmt.Errorf(i18n.T().CopyOf, from, err)
 	}
 	want := hex.EncodeToString(h.Sum(nil))
 	got, err := HashFile(to)
 	if err != nil || got != want {
 		_ = os.Remove(to)
 		if err == nil {
-			err = errors.New("contenuto diverso dall'originale")
+			err = errors.New(i18n.T().CopyDiffers)
 		}
-		return fmt.Errorf("verifica della copia %s: %w", to, err)
+		return fmt.Errorf(i18n.T().CopyCheck, to, err)
 	}
 	_ = os.Chtimes(to, fi.ModTime(), fi.ModTime())
 	return nil
@@ -85,11 +86,10 @@ func CheckRaw(root string) error {
 	}
 	target, _ := os.Readlink(link)
 	if st, err := os.Stat(link); err != nil || !st.IsDir() {
-		return fmt.Errorf("%w: %s punta a %s, che non si raggiunge: la condivisione è montata?", ErrRawUnreachable, link, target)
+		return fmt.Errorf(i18n.T().RawUnreachableLink, ErrRawUnreachable, link, target)
 	}
 	if _, err := os.Stat(filepath.Join(link, core.RawMarker)); err != nil {
-		return fmt.Errorf("%w: in %s manca %s: la condivisione è montata? (se è una cartella nuova, configurala con wizki raw)",
-			ErrRawUnreachable, target, core.RawMarker)
+		return fmt.Errorf(i18n.T().RawMarkerMissing, ErrRawUnreachable, target, core.RawMarker)
 	}
 	return nil
 }
@@ -100,14 +100,14 @@ func ReadRawState(root, target string) (core.RawState, error) {
 	st := core.RawState{Root: root, Target: target, Same: map[string]bool{}, Conflict: map[string]bool{}}
 	tfi, err := os.Stat(target)
 	if err != nil {
-		return st, fmt.Errorf("la cartella remota %s non si raggiunge: %w", target, err)
+		return st, fmt.Errorf(i18n.T().RawTargetUnreachable, target, err)
 	}
 	if !tfi.IsDir() {
-		return st, fmt.Errorf("%s non è una cartella", target)
+		return st, fmt.Errorf(i18n.T().NotADir, target)
 	}
 	probe, err := os.CreateTemp(target, ".wizki-prova-*")
 	if err != nil {
-		return st, fmt.Errorf("non posso scrivere in %s: %w", target, err)
+		return st, fmt.Errorf(i18n.T().CannotWrite, target, err)
 	}
 	probe.Close()
 	_ = os.Remove(probe.Name())
@@ -126,7 +126,7 @@ func ReadRawState(root, target string) (core.RawState, error) {
 		st.LinkTo, err = os.Readlink(link)
 		return st, err
 	case !fi.IsDir():
-		return st, fmt.Errorf("%s non è una cartella", link)
+		return st, fmt.Errorf(i18n.T().NotADir, link)
 	}
 	st.Local = []string{}
 	err = filepath.WalkDir(link, func(p string, d fs.DirEntry, err error) error {

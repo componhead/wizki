@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"wizki/i18n"
 )
 
 // Dep è un programma (o una lingua di Tesseract) di cui wizki ha bisogno.
@@ -58,18 +60,19 @@ const ZkInstallURL = "https://github.com/zk-org/zk#install"
 // Deps elenca le dipendenze di wizki, comprese le lingue OCR richieste
 // (lang, es. "ita" o "ita+eng").
 func Deps(lang string) []Dep {
+	d := i18n.T()
 	deps := []Dep{
-		{Name: "git", Purpose: "storia della wiki (serve a init)", Required: true},
-		{Name: "pdftotext", Purpose: "testo dei PDF"},
-		{Name: "pdftoppm", Purpose: "OCR dei PDF scansionati"},
-		{Name: "tesseract", Purpose: "OCR di scansioni e immagini"},
+		{Name: "git", Purpose: d.PurposeGit, Required: true},
+		{Name: "pdftotext", Purpose: d.PurposePdftotext},
+		{Name: "pdftoppm", Purpose: d.PurposePdftoppm},
+		{Name: "tesseract", Purpose: d.PurposeTesseract},
 	}
 	for _, l := range strings.Split(lang, "+") {
 		if l = strings.TrimSpace(l); l != "" {
-			deps = append(deps, Dep{Name: "tesseract-" + l, Purpose: "lingua " + l + " per l'OCR", Lang: l})
+			deps = append(deps, Dep{Name: "tesseract-" + l, Purpose: fmt.Sprintf(d.PurposeLang, l), Lang: l})
 		}
 	}
-	return append(deps, Dep{Name: "zk", Purpose: "note, tag e link (serve a lint)"})
+	return append(deps, Dep{Name: "zk", Purpose: d.PurposeZk})
 }
 
 // DepReport: una riga per dipendenza, ✓ se c'è e ✗ se manca.

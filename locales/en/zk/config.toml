@@ -1,0 +1,53 @@
+# zk notebook for the wiki. Keys checked against the zk-org/zk source.
+# After `zk init`, `zk list` must not show raw/.
+
+[note]
+language = "en"
+default-title = "Untitled"
+# Sources: <sha>-<slug>, sha = first 8 hex chars of the original's SHA-256,
+# passed with `zk new sources --extra sha=<sha>`.
+filename = "{{extra.sha}}-{{slug title}}"
+extension = "md"
+template = "source.md"
+# raw.local-*: the old local raw, kept by `wizki raw` after moving it to the network
+exclude = ["raw/**", "raw.local-*/**", "log.md", "index.md"]
+
+[group.sources]
+paths = ["sources"]
+
+[group.topics]
+paths = ["topics"]
+
+[group.topics.note]
+# The hub is named after the topic, without a date: [[school]] -> topics/school.md
+filename = "{{slug title}}"
+template = "topic.md"
+
+[group.entities]
+paths = ["entities"]
+
+[group.entities.note]
+# One page per entity (person, organization, place, law, work, event), without a date:
+# `zk new entities --title "<Name>" --extra type=<type>` -> entities/<slug>.md
+filename = "{{slug title}}"
+template = "entity.md"
+
+[group.analyses]
+paths = ["analyses"]
+
+[group.analyses.note]
+# Analyses saved from queries: <date>-<slug>, so they sort by date.
+# `zk new analyses --title "<title>"` -> analyses/2026-11-08-<slug>.md
+filename = "{{format-date now '%Y-%m-%d'}}-{{slug title}}"
+template = "analysis.md"
+
+[format.markdown]
+link-format = "wiki"
+hashtags = true
+
+[alias]
+topics   = "zk tag list $argv"
+orphans  = "zk list --orphan $argv"
+untagged = "zk list --tagless $argv"
+by       = "zk list --tag $argv"
+hist     = "zk list --format path --delimiter0 --quiet $argv | xargs -t -0 git log --patch --"
