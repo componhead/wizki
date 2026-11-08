@@ -75,3 +75,35 @@ func execOCR(ctx context.Context, s core.OCR) error {
 	}
 	return os.WriteFile(s.Out, []byte(text), 0o644)
 }
+
+// CheckTesseract verifica tesseract e le lingue richieste: basta per l'OCR
+// delle immagini, che non passa da pdftoppm.
+func CheckTesseract(ctx context.Context, lang string) error {
+	if _, err := exec.LookPath("tesseract"); err != nil {
+		return fmt.Errorf("%w: manca tesseract", ErrOCRUnavailable)
+	}
+	out, err := exec.CommandContext(ctx, "tesseract", "--list-langs").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: tesseract --list-langs: %v", ErrOCRUnavailable, err)
+	}
+	if miss := core.MissingLangs(core.ParseLangs(string(out)), lang); len(miss) > 0 {
+		return fmt.Errorf("%w: manca il pacchetto lingua %s di Tesseract", ErrOCRUnavailable, strings.Join(miss, ", "))
+	}
+	return nil
+}
+
+// execImageText scrive il riferimento all'immagine e, se richiesto, il testo
+// letto da Tesseract. Un'immagine senza testo non è un errore: la si guarda.
+func execImageText(ctx context.Context, s core.ImageText) error {
+	text := s.Header
+	if s.Lang != "" {
+		out, err := exec.CommandContext(ctx, "tesseract", s.Image, "stdout", "-l", s.Lang).Output()
+		if err != nil {
+			return stderrOf("tesseract", err)
+		}
+		if t := strings.TrimSpace(string(out)); t != "" {
+			text += "\n## Testo (OCR)\n\n" + t + "\n"
+		}
+	}
+	return Exec(ctx, core.WriteFile{Path: s.Out, Data: []byte(text)})
+}

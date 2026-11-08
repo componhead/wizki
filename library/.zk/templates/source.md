@@ -1,8 +1,10 @@
 ---
 id: {{extra.sha}}
 title: {{title}}
+summary:
 date: {{format-date now '%Y-%m-%d'}}
-pdf: raw/pdf/
+published:
+raw: raw/
 ---
 
 # {{title}}
@@ -11,3 +13,4 @@ pdf: raw/pdf/
 
 ## Topic
 
+## Entità

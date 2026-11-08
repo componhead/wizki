@@ -27,9 +27,14 @@ var WikiGitignore = []byte("/.zk/notebook.db\n")
 var WikiDirs = []string{
 	"inbox",
 	filepath.Join("raw", "pdf"),
+	filepath.Join("raw", "doc"),
+	filepath.Join("raw", "assets"),
+	filepath.Join("raw", "data"),
 	filepath.Join("raw", "text"),
 	"sources",
 	"topics",
+	"entities",
+	"analyses",
 }
 
 // ValidWikiName: il nome di una wiki è anche il nome della sua cartella,
@@ -53,16 +58,24 @@ func LogHeader(name string) []byte {
 	return []byte("# Log: " + name + "\n\n")
 }
 
-// PlanInit pianifica la creazione della wiki <name>/: le cartelle di WikiDirs,
-// i file della configurazione zk (path relativo alla radice -> contenuto),
-// log.md, .gitignore e infine il repository git.
-// Ogni cartella creata, radice e cartelle intermedie comprese, riceve un
-// .gitkeep, una volta sola.
-// I file vengono in ordine di path, così il piano è deterministico.
+// PlanInit pianifica la creazione della wiki <name>/: il layout di Layout e
+// infine il repository git.
 func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
 	if err := ValidWikiName(name); err != nil {
 		return nil, err
 	}
+	return append(Layout(name, name, zkFiles), GitInit{Dir: name}), nil
+}
+
+// Layout pianifica i file e le cartelle di una wiki con radice root: le
+// cartelle di WikiDirs, i file della configurazione zk (path relativo alla
+// radice -> contenuto), log.md (intestato a logName), la panoramica, un
+// index.md iniziale e .gitignore. Non valida root: lo usa anche `upgrade`
+// su wiki esistenti, la cui radice può essere un path qualsiasi.
+// Ogni cartella creata, radice e cartelle intermedie comprese, riceve un
+// .gitkeep, una volta sola.
+// I file vengono in ordine di path, così il piano è deterministico.
+func Layout(root, logName string, zkFiles map[string][]byte) []Step {
 	var steps []Step
 	seen := map[string]bool{}
 	// mkdir crea rel (relativa alla radice) e i suoi genitori, ciascuno con un
@@ -76,7 +89,7 @@ func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
 		if rel != "." {
 			mkdir(filepath.Dir(rel))
 		}
-		dir := filepath.Join(name, rel)
+		dir := filepath.Join(root, rel)
 		steps = append(steps, Mkdir{dir}, WriteFile{Path: filepath.Join(dir, ".gitkeep")})
 	}
 	mkdir(".")
@@ -90,12 +103,12 @@ func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
 	sort.Strings(rels)
 	for _, rel := range rels {
 		mkdir(filepath.Dir(rel))
-		steps = append(steps, WriteFile{Path: filepath.Join(name, rel), Data: zkFiles[rel]})
+		steps = append(steps, WriteFile{Path: filepath.Join(root, rel), Data: zkFiles[rel]})
 	}
-	steps = append(steps,
-		WriteFile{Path: filepath.Join(name, "log.md"), Data: LogHeader(name)},
-		WriteFile{Path: filepath.Join(name, ".gitignore"), Data: WikiGitignore},
-		GitInit{Dir: name},
+	return append(steps,
+		WriteFile{Path: filepath.Join(root, "log.md"), Data: LogHeader(logName)},
+		WriteFile{Path: filepath.Join(root, OverviewPath), Data: OverviewPage()},
+		WriteFile{Path: filepath.Join(root, IndexPath), Data: []byte(BuildIndex([]Page{ParsePage(OverviewPath, string(OverviewPage()))}))},
+		WriteFile{Path: filepath.Join(root, ".gitignore"), Data: WikiGitignore},
 	)
-	return steps, nil
 }

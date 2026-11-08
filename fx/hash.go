@@ -12,8 +12,8 @@ import (
 	"wizki/core"
 )
 
-// ErrDuplicate: il PDF ha lo stesso contenuto di uno già presente in raw/pdf/.
-var ErrDuplicate = errors.New("PDF già acquisito")
+// ErrDuplicate: la fonte ha lo stesso contenuto di un originale già in raw/.
+var ErrDuplicate = errors.New("fonte già acquisita")
 
 // HashFile restituisce lo SHA-256 esadecimale del contenuto del file.
 func HashFile(path string) (string, error) {
@@ -27,31 +27,6 @@ func HashFile(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// HashPDFs calcola lo SHA-256 di ogni *.pdf in dir (path -> hash).
-// Una directory inesistente equivale a nessun PDF.
-func HashPDFs(dir string) (map[string]string, error) {
-	out := map[string]string{}
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return out, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	for _, e := range entries {
-		if e.IsDir() || !core.IsPDF(e.Name()) {
-			continue
-		}
-		p := filepath.Join(dir, e.Name())
-		sum, err := HashFile(p)
-		if err != nil {
-			return nil, err
-		}
-		out[p] = sum
-	}
-	return out, nil
 }
 
 // SourceIDs legge il campo id: del frontmatter di ogni nota in <root>/sources/
@@ -68,6 +43,34 @@ func SourceIDs(root string) (map[string]string, error) {
 			return nil, err
 		}
 		out[filepath.Join("sources", filepath.Base(p))] = core.FrontmatterField(string(b), "id")
+	}
+	return out, nil
+}
+
+// HashRaw calcola lo SHA-256 degli originali di ogni tipo (path -> hash): i
+// file al primo livello delle cartelle core.RawDirs sotto root.
+func HashRaw(root string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, d := range core.RawDirs() {
+		dir := filepath.Join(root, d)
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			if _, ok := core.SourceKind(e.Name()); e.IsDir() || !ok {
+				continue
+			}
+			p := filepath.Join(dir, e.Name())
+			sum, err := HashFile(p)
+			if err != nil {
+				return nil, err
+			}
+			out[p] = sum
+		}
 	}
 	return out, nil
 }

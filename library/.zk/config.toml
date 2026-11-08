@@ -9,7 +9,7 @@ default-title = "Senza titolo"
 filename = "{{extra.sha}}-{{slug title}}"
 extension = "md"
 template = "source.md"
-exclude = ["raw/**", "log.md"]
+exclude = ["raw/**", "log.md", "index.md"]
 
 [group.sources]
 paths = ["sources"]
@@ -21,6 +21,24 @@ paths = ["topics"]
 # L'hub si chiama come il topic, senza data: [[scuola]] -> topics/scuola.md
 filename = "{{slug title}}"
 template = "topic.md"
+
+[group.entities]
+paths = ["entities"]
+
+[group.entities.note]
+# Una pagina per entità (persona, ente, luogo, norma, opera, evento), senza data:
+# `zk new entities --title "<Nome>" --extra tipo=<tipo>` -> entities/<slug>.md
+filename = "{{slug title}}"
+template = "entity.md"
+
+[group.analyses]
+paths = ["analyses"]
+
+[group.analyses.note]
+# Analisi salvate dalle query: <data>-<slug>, così si ordinano per data.
+# `zk new analyses --title "<titolo>"` -> analyses/2026-11-08-<slug>.md
+filename = "{{format-date now '%Y-%m-%d'}}-{{slug title}}"
+template = "analysis.md"
 
 [format.markdown]
 link-format = "wiki"
