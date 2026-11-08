@@ -5,6 +5,12 @@ notebook, following the "LLM Wiki" pattern: raw sources (PDFs and their extracte
 text) are immutable, the wiki is markdown maintained by Claude Code, and
 `CLAUDE.md` is the schema it follows.
 
+It is an implementation of Andrej Karpathy's
+[LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) idea,
+built on a [zk](https://github.com/zk-org/zk) Zettelkasten notebook instead of
+Obsidian: notes, tags and links are managed with `zk` from the command line, and
+topic views are `zk` queries rather than folders.
+
 ## Build
 
     go build -o wiki .
@@ -47,6 +53,6 @@ Exit codes: 0 ok, 1 error (or `lint` warnings), 2 usage, 3 no text (even with OC
 
 Open Claude Code in this folder and run `/ingest "<file>.pdf"` to ingest a PDF
 from `library/inbox/`, or `/lint` for a health check. The rules Claude follows
-are in `CLAUDE.md` (English translation: `CLAUDE-en.md`).
+are in `CLAUDE.md` (Italian first, English translation below).
 
 To learn with sample PDFs, see the sibling project `../wizki-tutorial`.
