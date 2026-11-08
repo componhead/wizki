@@ -289,3 +289,78 @@ func TestLogAppendOnly(t *testing.T) {
 		t.Errorf("log = %q", b)
 	}
 }
+
+func TestInitCreaLaWiki(t *testing.T) {
+	t.Chdir(t.TempDir())
+	code, out, errb := do(t, "init", "mia")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	for _, p := range []string{"inbox", "raw/pdf", "raw/text", "sources", "topics", ".git"} {
+		if fi, err := os.Stat(filepath.Join("mia", p)); err != nil || !fi.IsDir() {
+			t.Errorf("manca la cartella %s", p)
+		}
+		if p == ".git" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join("mia", p, ".gitkeep")); err != nil {
+			t.Errorf("manca %s/.gitkeep", p)
+		}
+	}
+	cfg, _ := os.ReadFile(filepath.Join("mia", ".zk", "config.toml"))
+	want, _ := zkConfig.ReadFile("library/.zk/config.toml")
+	if len(cfg) == 0 || !bytes.Equal(cfg, want) {
+		t.Error("config.toml diverso da quello incorporato")
+	}
+	for _, p := range []string{".zk/templates/source.md", ".zk/templates/topic.md"} {
+		if _, err := os.Stat(filepath.Join("mia", p)); err != nil {
+			t.Errorf("manca %s", p)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join("mia", "log.md")); string(b) != "# Log: mia\n\n" {
+		t.Errorf("log.md = %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join("mia", ".gitignore")); !strings.Contains(string(b), ".zk/notebook.db") {
+		t.Errorf(".gitignore = %q", b)
+	}
+	head, _ := os.ReadFile(filepath.Join("mia", ".git", "HEAD"))
+	if strings.TrimSpace(string(head)) != "ref: refs/heads/master" {
+		t.Errorf("HEAD = %q", head)
+	}
+	if !strings.Contains(out, `wiki "mia" pronta`) {
+		t.Errorf("out = %s", out)
+	}
+}
+
+func TestInitNonSovrascrive(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, errb := do(t, "init", "mia"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	log := filepath.Join("mia", "log.md")
+	if err := os.WriteFile(log, []byte("mio log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := do(t, "init", "mia")
+	if code != 0 {
+		t.Fatalf("seconda init: exit %d: %s", code, errb)
+	}
+	if b, _ := os.ReadFile(log); string(b) != "mio log\n" {
+		t.Errorf("log.md sovrascritto: %q", b)
+	}
+	for _, want := range []string{"già presente: mia/log.md", "già presente: mia/.git"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("manca %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestInitNomeNonValido(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, _ := do(t, "init", "a/b"); code != 1 {
+		t.Errorf("exit = %d, atteso 1", code)
+	}
+	if code, _, _ := do(t, "init"); code != 1 {
+		t.Errorf("senza nome: exit = %d, atteso 1", code)
+	}
+}

@@ -1,4 +1,4 @@
-// Package fx raccoglie gli effetti collaterali: filesystem, pdftotext, zk.
+// Package fx raccoglie gli effetti collaterali: filesystem, pdftotext, zk, git.
 // È l'unico package che parla col mondo esterno.
 package fx
 
@@ -17,6 +17,9 @@ import (
 
 // ErrNoText: il PDF non ha livello di testo (probabile scansione).
 var ErrNoText = errors.New("nessun testo estratto dal PDF")
+
+// ErrExists: il file (o il repository git) da creare c'è già; non lo tocco.
+var ErrExists = errors.New("esiste già")
 
 // Exec esegue un singolo passo del piano.
 func Exec(ctx context.Context, s core.Step) error {
@@ -42,6 +45,26 @@ func Exec(ctx context.Context, s core.Step) error {
 		return nil
 	case core.OCR:
 		return execOCR(ctx, s)
+	case core.WriteFile:
+		f, err := os.OpenFile(s.Path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%w: %s", ErrExists, s.Path)
+		}
+		if err != nil {
+			return err
+		}
+		_, err = f.Write(s.Data)
+		return errors.Join(err, f.Close())
+	case core.GitInit:
+		if _, err := os.Stat(filepath.Join(s.Dir, ".git")); err == nil {
+			return fmt.Errorf("%w: %s", ErrExists, filepath.Join(s.Dir, ".git"))
+		}
+		cmd := exec.CommandContext(ctx, "git", "init", "-q", "-b", "master")
+		cmd.Dir = s.Dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git init: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	default:
 		return fmt.Errorf("passo sconosciuto %T", s)
 	}

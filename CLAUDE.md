@@ -25,6 +25,11 @@ e `wizki` (binario Go di questo repo: estrazione PDF, log, lint).
     ├── topics/           un hub per topic: sintesi cumulativa
     └── log.md            registro in sola aggiunta
 
+Una nuova wiki si crea con `./bin/wizki init <nome>`: crea `./<nome>/` con questa
+struttura (un `.gitkeep` per cartella), `.zk/` (config e template copiati da `library/.zk/`), `.gitignore`
+e un repository git (`git init -b master`). Non sovrascrive nulla: rilanciarlo
+completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`).
+
 ### Ingestion di un PDF
 
 1. `./bin/wizki extract library/inbox/<file>.pdf` -> stampa il path del testo e,
@@ -100,6 +105,11 @@ and `wizki` (this repo's Go binary: PDF extraction, log, lint).
     ├── sources/          one note per source: summary + tags + [[topic]]
     ├── topics/           one hub per topic: cumulative synthesis
     └── log.md            append-only log
+
+A new wiki is created with `./bin/wizki init <name>`: it creates `./<name>/` with this
+layout (a `.gitkeep` per folder), `.zk/` (config and templates copied from `library/.zk/`), `.gitignore`
+and a git repository (`git init -b master`). It never overwrites anything: running it
+again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_ROOT`).
 
 ### Ingesting a PDF
 

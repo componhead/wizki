@@ -8,10 +8,13 @@
 //	wizki [-root library] log <ingest|query|lint> <titolo>
 //	wizki [-root library] lint                     controlli di salute (exit 1 se ci sono warn)
 //	wizki slug <testo>
+//	wizki init <nome>                              crea la wiki ./<nome>/ (cartelle, .zk/, log.md,
+//	                                              .gitignore, git init -b master); non sovrascrive nulla
 package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,6 +26,12 @@ import (
 	"wizki/core"
 	"wizki/fx"
 )
+
+// zkConfig è la configurazione zk di riferimento, copiata da `wizki init`
+// in ogni nuova wiki: l'unica fonte resta library/.zk/ di questo repo.
+//
+//go:embed library/.zk/config.toml library/.zk/templates/source.md library/.zk/templates/topic.md
+var zkConfig embed.FS
 
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
@@ -39,13 +48,18 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(errw, "uso: wizki [-root dir] extract|log|lint|slug ...")
+		fmt.Fprintln(errw, "uso: wizki [-root dir] init|extract|log|lint|slug ...")
 		return 2
 	}
 
 	var err error
 	code := 0
 	switch rest[0] {
+	case "init":
+		err = need(rest, 2, "wizki init <nome>")
+		if err == nil {
+			err = initWiki(ctx, rest[1], out)
+		}
 	case "extract":
 		err = need(rest, 2, "wizki extract <file.pdf>")
 		if err == nil {
@@ -137,6 +151,52 @@ func extract(ctx context.Context, root, pdf, lang string, noOCR bool, out, errw 
 	fmt.Fprintln(out, dest)
 	fmt.Fprintln(out, core.ShortID(sum))
 	return nil
+}
+
+// initWiki crea la wiki <name>/ nella cartella corrente. È idempotente: ciò che
+// esiste già viene lasciato com'è e segnalato, così si può rilanciare per
+// completare una wiki a cui manca qualche pezzo.
+func initWiki(ctx context.Context, name string, out io.Writer) error {
+	files, err := zkFiles()
+	if err != nil {
+		return err
+	}
+	steps, err := core.PlanInit(name, files)
+	if err != nil {
+		return err
+	}
+	for _, s := range steps {
+		err := fx.Exec(ctx, s)
+		if err != nil && !errors.Is(err, fx.ErrExists) {
+			return err
+		}
+		status := "creato:"
+		if err != nil {
+			status = "già presente:"
+		}
+		switch s := s.(type) {
+		case core.WriteFile:
+			fmt.Fprintln(out, status, s.Path)
+		case core.GitInit:
+			fmt.Fprintln(out, status, filepath.Join(s.Dir, ".git"))
+		}
+	}
+	fmt.Fprintf(out, "wiki %q pronta: usa wizki -root %s (o WIKI_ROOT=%s)\n", name, name, name)
+	return nil
+}
+
+// zkFiles legge la configurazione zk incorporata: path relativo alla radice
+// della wiki (es. .zk/config.toml) -> contenuto.
+func zkFiles() (map[string][]byte, error) {
+	files := map[string][]byte{}
+	for _, p := range []string{"config.toml", "templates/source.md", "templates/topic.md"} {
+		b, err := zkConfig.ReadFile("library/.zk/" + p)
+		if err != nil {
+			return nil, err
+		}
+		files[filepath.Join(".zk", filepath.FromSlash(p))] = b
+	}
+	return files, nil
 }
 
 func logEntry(root, kind, title string, out io.Writer) error {

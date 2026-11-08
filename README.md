@@ -16,7 +16,7 @@ topic views are `zk` queries rather than folders.
     go build -o bin/wizki .
 
 Prerequisites: Go 1.24+, `pdftotext` and `pdftoppm` (poppler), `tesseract` with the
-`ita` language pack (only for scans), `zk` in the `PATH` (for `lint`).
+`ita` language pack (only for scans), `zk` in the `PATH` (for `lint`), `git` (for `init`).
 
 ## Usage
 
@@ -24,6 +24,7 @@ Prerequisites: Go 1.24+, `pdftotext` and `pdftoppm` (poppler), `tesseract` with 
     wizki [-root library] log <ingest|query|lint> <title>
     wizki [-root library] lint
     wizki slug <text>
+    wizki init <name>
 
 - `extract`: moves the PDF into `raw/pdf/` and extracts its text into `raw/text/`,
   printing the text path and, on the next line, the PDF's id (first 8 hex chars
@@ -35,6 +36,12 @@ Prerequisites: Go 1.24+, `pdftotext` and `pdftoppm` (poppler), `tesseract` with 
   topics, orphan notes, topics with a single source, missing or duplicate
   `id:` among source notes).
 - `slug`: prints the slug of a text.
+- `init`: creates a new wiki in `./<name>/`: the layout below (a `.gitkeep` in each
+  folder), the zk config and templates (embedded in the binary from
+  `library/.zk/` at build time), a
+  `log.md` with a `# Log: <name>` header, a `.gitignore` for the zk index, and
+  `git init -b master`. It never overwrites existing files; running it again
+  only adds what is missing.
 
 `-root` and `-ocr-lang` can also be set with the `WIKI_ROOT` and `WIKI_OCR_LANG`
 environment variables.

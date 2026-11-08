@@ -175,3 +175,34 @@ func TestIDFindings(t *testing.T) {
 		t.Errorf("got %#v", got)
 	}
 }
+
+func TestPlanInit(t *testing.T) {
+	steps, err := PlanInit("w", map[string][]byte{
+		".zk/templates/t.md": []byte("T"),
+		".zk/config.toml":    []byte("C"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Step{
+		Mkdir{"w"},
+		Mkdir{"w/inbox"}, WriteFile{Path: "w/inbox/.gitkeep"},
+		Mkdir{"w/raw/pdf"}, WriteFile{Path: "w/raw/pdf/.gitkeep"},
+		Mkdir{"w/raw/text"}, WriteFile{Path: "w/raw/text/.gitkeep"},
+		Mkdir{"w/sources"}, WriteFile{Path: "w/sources/.gitkeep"},
+		Mkdir{"w/topics"}, WriteFile{Path: "w/topics/.gitkeep"},
+		Mkdir{"w/.zk"}, WriteFile{"w/.zk/config.toml", []byte("C")},
+		Mkdir{"w/.zk/templates"}, WriteFile{"w/.zk/templates/t.md", []byte("T")},
+		WriteFile{"w/log.md", []byte("# Log: w\n\n")},
+		WriteFile{"w/.gitignore", WikiGitignore},
+		GitInit{"w"},
+	}
+	if !reflect.DeepEqual(steps, want) {
+		t.Errorf("got %#v", steps)
+	}
+	for _, bad := range []string{"", "  ", ".", "..", "a/b", `a\b`, "-x"} {
+		if _, err := PlanInit(bad, nil); err == nil {
+			t.Errorf("atteso errore per nome %q", bad)
+		}
+	}
+}
