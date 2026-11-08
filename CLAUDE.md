@@ -42,17 +42,17 @@ completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`).
    In tutti questi casi il PDF resta in inbox: fermati e dimmelo.
 2. Leggi il testo. Individua 1-3 topic: NOMI, italiano, minuscolo, singolare.
    Un topic conta solo se centrale, non se citato di passaggio.
-3. `zk topics` per vedere i topic esistenti. Riusali. Creane uno nuovo solo
+3. `zk -W library topics` per vedere i topic esistenti. Riusali. Creane uno nuovo solo
    se nessuno copre il contenuto. Mai plurali o sinonimi di topic esistenti.
 4. Mostrami titolo, topic scelti e perché. Procedi dopo la mia conferma.
 5. Nota-fonte, con l'id stampato da `wizki extract` come `<sha>`:
-   `cd library && zk new sources --title "<titolo>" --extra sha=<sha> --print-path`
+   `zk -W library new sources --title "<titolo>" --extra sha=<sha> --print-path`
    (il file si chiama `<sha>-<titolo-slug>.md` e lo SHA finisce anche nel
    frontmatter come `id: <sha>`; senza `--extra sha` sarebbero vuoti)
    poi scrivi: riassunto di 5 righe, tag `#<topic>`, link `[[topics/<topic>|<Titolo topic>]]`,
    `pdf:` con il path in `raw/pdf/`.
 6. Per ogni topic: se manca `topics/<topic>.md` crealo con
-   `zk new topics --title "<topic>" --print-path`.
+   `zk -W library new topics --title "<topic>" --print-path`.
    Aggiorna la sintesi integrando la nuova fonte, citala con `[[sources/<nota-fonte>|<Titolo fonte>]]`
    e segnala sotto "Contraddizioni" ciò che confligge con quanto già scritto.
 7. Se due topic compaiono nella stessa fonte, linkali in "Vedi anche".
@@ -62,7 +62,7 @@ Una fonte può toccare 10-15 pagine: è normale.
 
 ### Query
 
-Rispondi leggendo prima i topic rilevanti (`zk by <topic>`, `zk list --link-to topics/<topic>.md`),
+Rispondi leggendo prima i topic rilevanti (`zk -W library by <topic>`, `zk -W library list --link-to topics/<topic>.md`),
 poi le fonti. Se la risposta è un'analisi riutilizzabile, proponi di salvarla
 come nota e registra `./bin/wizki log query "<titolo>"`.
 
@@ -83,6 +83,9 @@ le contraddizioni tra le pagine topic. Registra con `./bin/wizki log lint "<data
   zk risolve `[[scuola]]` con un match parziale sul nome file e potrebbe puntare
   a una fonte il cui nome contiene "scuola"; il percorso esatto ha la precedenza.
 - `log.md` è escluso dall'indice di zk (vedi `exclude` in `.zk/config.toml`).
+- Lancia zk sempre dalla radice del repo con `zk -W library ...`, mai `cd library && zk`.
+  `ZK_NOTEBOOK_DIR` punta a un altro notebook, e `--notebook-dir` da solo non basta:
+  `zk new <cartella>` risolve la cartella rispetto alla directory corrente.
 
 ---
 
@@ -123,17 +126,17 @@ again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_R
    In all these cases the PDF stays in inbox: stop and tell me.
 2. Read the text. Identify 1-3 topics: NOUNS, Italian, lowercase, singular.
    A topic counts only if it is central, not if mentioned in passing.
-3. `zk topics` to see the existing topics. Reuse them. Create a new one only
+3. `zk -W library topics` to see the existing topics. Reuse them. Create a new one only
    if none covers the content. Never plurals or synonyms of existing topics.
 4. Show me the title, the chosen topics and why. Proceed after my confirmation.
 5. Source note, with the id printed by `wizki extract` as `<sha>`:
-   `cd library && zk new sources --title "<title>" --extra sha=<sha> --print-path`
+   `zk -W library new sources --title "<title>" --extra sha=<sha> --print-path`
    (the file is named `<sha>-<title-slug>.md` and the SHA also goes into the
    frontmatter as `id: <sha>`; without `--extra sha` both would be empty)
    then write: a 5-line summary, tag `#<topic>`, link `[[topics/<topic>|<Topic title>]]`,
    `pdf:` with the path in `raw/pdf/`.
 6. For each topic: if `topics/<topic>.md` is missing, create it with
-   `zk new topics --title "<topic>" --print-path`.
+   `zk -W library new topics --title "<topic>" --print-path`.
    Update the synthesis by integrating the new source, cite it with `[[sources/<source-note>|<Source title>]]`
    and flag under "Contraddizioni" (Contradictions) whatever conflicts with what is already written.
 7. If two topics appear in the same source, link them under "Vedi anche" (See also).
@@ -143,7 +146,7 @@ A single source may touch 10-15 pages: that's normal.
 
 ### Query
 
-Answer by first reading the relevant topics (`zk by <topic>`, `zk list --link-to topics/<topic>.md`),
+Answer by first reading the relevant topics (`zk -W library by <topic>`, `zk -W library list --link-to topics/<topic>.md`),
 then the sources. If the answer is a reusable analysis, offer to save it
 as a note and record `./bin/wizki log query "<title>"`.
 
@@ -164,3 +167,6 @@ for contradictions between topic pages. Record with `./bin/wizki log lint "<date
   zk resolves `[[scuola]]` with a partial match on the file name and might point
   to a source whose name contains "scuola"; the exact path takes precedence.
 - `log.md` is excluded from the zk index (see `exclude` in `.zk/config.toml`).
+- Always run zk from the repo root with `zk -W library ...`, never `cd library && zk`.
+  `ZK_NOTEBOOK_DIR` points to another notebook, and `--notebook-dir` alone is not enough:
+  `zk new <folder>` resolves the folder against the current directory.

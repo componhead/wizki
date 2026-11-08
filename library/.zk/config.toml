@@ -27,8 +27,8 @@ link-format = "wiki"
 hashtags = true
 
 [alias]
-topics   = "zk tag list $@"
-orphans  = "zk list --orphan $@"
-untagged = "zk list --tagless $@"
-by       = "zk list --tag $@"
-hist     = "zk list --format path --delimiter0 --quiet $@ | xargs -t -0 git log --patch --"
+topics   = "zk tag list $argv"
+orphans  = "zk list --orphan $argv"
+untagged = "zk list --tagless $argv"
+by       = "zk list --tag $argv"
+hist     = "zk list --format path --delimiter0 --quiet $argv | xargs -t -0 git log --patch --"
