@@ -100,7 +100,8 @@ nelle note restano validi. Se la condivisione non è montata (manca il marcatore
    acquisita (stesso contenuto di un originale in `raw/`, anche con nome diverso);
    6 = `raw/` in rete non raggiungibile (condivisione non montata).
    In tutti questi casi la fonte resta in inbox: fermati e dimmelo.
-2. Leggi il testo. Individua 1-3 topic: NOMI, italiano, minuscolo, singolare.
+2. Leggi il testo. Individua 1-3 topic: NOMI nella lingua della wiki
+   (`language` in `.zk/config.toml`: `it` → italiano, `en` → inglese), minuscolo, singolare.
    Un topic conta solo se centrale, non se citato di passaggio.
 3. `zk -W library topics` per vedere i topic esistenti. Riusali. Creane uno nuovo solo
    se nessuno copre il contenuto. Mai plurali o sinonimi di topic esistenti.
@@ -111,10 +112,19 @@ nelle note restano validi. Se la condivisione non è montata (manca il marcatore
    entità. Il titolo è il nome completo più comune (es. "Ministero dell'Istruzione
    e del Merito", non "MIM"); sigle e varianti vanno nella "Descrizione".
    Trova anche la data del documento (data in testa, protocollo, anno di
-   pubblicazione): `AAAA-MM-GG`, `AAAA-MM` o `AAAA`, oppure `sconosciuta` se
-   nel testo non c'è. Non usare la data di oggi né quella del file.
-5. Mostrami titolo, data del documento, topic scelti e perché, ed entità da
-   creare o aggiornare. Procedi dopo la mia conferma.
+   pubblicazione): `AAAA-MM-GG`, `AAAA-MM` o `AAAA`, oppure, se nel testo non
+   c'è, `sconosciuta` (wiki `it`) o `unknown` (wiki `en`). Non usare la data di
+   oggi né quella del file.
+5. Mostrami:
+   - titolo e data del documento;
+   - i 3-5 punti chiave che intendi scrivere nel riassunto e nelle sintesi dei
+     topic, ognuno in una riga, segnalando quelli che contraddicono o aggiornano
+     la wiki;
+   - i topic scelti e perché;
+   - le entità da creare o aggiornare.
+
+   Chiedimi su cosa insistere e cosa tralasciare. Procedi dopo la mia conferma,
+   seguendo le mie indicazioni su cosa enfatizzare.
 6. Nota-fonte, con l'id stampato da `wizki extract` come `<sha>`:
    `zk -W library new sources --title "<titolo>" --extra sha=<sha> --print-path`
    (il file si chiama `<sha>-<titolo-slug>.md` e lo SHA finisce anche nel
@@ -133,8 +143,10 @@ nelle note restano validi. Se la condivisione non è montata (manca il marcatore
    cosa sostituisce. Se è più vecchia, non sovrascrivere i dati più recenti:
    aggiungi le sue informazioni come storiche, datate ("nel 2019 ...").
 8. Per ogni entità: se manca, creala con
-   `zk -W library new entities --title "<Nome>" --extra tipo=<tipo> --print-path`
-   (`<tipo>`: `persona`, `ente`, `luogo`, `norma`, `opera`, `evento`).
+   - wiki `it`: `zk -W library new entities --title "<Nome>" --extra tipo=<tipo> --print-path`
+     (`<tipo>`: `persona`, `ente`, `luogo`, `norma`, `opera`, `evento`);
+   - wiki `en`: `zk -W library new entities --title "<Name>" --extra type=<type> --print-path`
+     (`<type>`: `person`, `organization`, `place`, `law`, `work`, `event`).
    Aggiungi sotto "Nelle fonti" cosa dice questa fonte, citandola; aggiorna
    "Descrizione" e `summary:`; segnala le "Contraddizioni" tra fonti.
    Le date contano come per i topic: i dati più vecchi restano, datati, come storia.
@@ -156,6 +168,11 @@ Una fonte può toccare 10-15 pagine: è normale.
 2. Poi leggi i topic e le entità (`zk -W library by <topic>`,
    `zk -W library list --link-to topics/<topic>.md`, `zk -W library list --link-to entities/<entità>.md`),
    e infine le fonti.
+   Se l'indice non basta (un nome o un termine preciso, una pagina che non sai
+   come si chiama), cerca nel testo:
+   - nelle pagine della wiki: `zk -W library list --match "<termini>"` (anche
+     per prefisso, es. `"lezion*"`);
+   - nel testo delle fonti: `rg -i "<termini>" library/raw/text/`.
 3. Rispondi citando le pagine con wikilink completi (percorso e titolo).
 4. Se la risposta è riutilizzabile (un confronto, una sintesi tra più topic, un
    collegamento non ovvio), proponi di salvarla come analisi. Se esiste già
@@ -210,6 +227,8 @@ Una fonte può toccare 10-15 pagine: è normale.
    - **Analisi da rivedere**: per quelle segnalate come `info`, leggi le fonti nuove e
      dimmi se le cambiano; proponi l'aggiornamento come al punto 5 di "Query".
    - **Nuove domande e fonti**: proponi 3-5 domande da approfondire e fonti da cercare.
+   - **Schema**: casi che queste regole non coprono o che si ripetono; proponi la
+     modifica a questo file (vedi l'ultima regola).
 3. Presenta un report: ogni problema con pagina, motivo e correzione proposta.
    Non applicare nulla senza la mia conferma. Le domande che approvo vanno in
    "Domande aperte" di `overview.md`. Dopo le correzioni, `./bin/wizki index`.
@@ -232,10 +251,16 @@ Una fonte può toccare 10-15 pagine: è normale.
 - `log.md` e `index.md` sono esclusi dall'indice di zk (vedi `exclude` in `.zk/config.toml`):
   altrimenti l'indice, che linka tutto, nasconderebbe le note orfane.
 - Non modificare mai `index.md` a mano: si rigenera con `./bin/wizki index`
-  da `title:`, `summary:`, `tipo:`, `date:`, `published:` e dai link delle fonti.
+  da `title:`, `summary:`, `tipo:` (o `type:`), `date:`, `published:` e dai link delle fonti.
 - Lancia zk sempre dalla radice del repo con `zk -W library ...`, mai `cd library && zk`.
   `ZK_NOTEBOOK_DIR` punta a un altro notebook, e `--notebook-dir` da solo non basta:
   `zk new <cartella>` risolve la cartella rispetto alla directory corrente.
+- Questo schema evolve con l'uso. Se noti un caso che le regole non coprono o
+  che si ripete (un tipo di fonte nuovo, una sezione che manca sempre, una regola
+  che produce pagine sbagliate o doppioni), alla fine dell'operazione proponimi
+  la modifica a questo file con il testo esatto e il motivo. Non modificarlo senza
+  la mia conferma; dopo, aggiorna entrambe le metà (italiano e inglese) e, se la
+  regola tocca i comandi, `.claude/commands/`.
 
 ---
 
@@ -334,7 +359,8 @@ in notes stay valid. If the share is not mounted (the marker is missing),
    (same content as an original in `raw/`, even under a different name);
    6 = network `raw/` unreachable (share not mounted).
    In all these cases the source stays in inbox: stop and tell me.
-2. Read the text. Identify 1-3 topics: NOUNS, Italian, lowercase, singular.
+2. Read the text. Identify 1-3 topics: NOUNS in the wiki's language
+   (`language` in `.zk/config.toml`: `it` → Italian, `en` → English), lowercase, singular.
    A topic counts only if it is central, not if mentioned in passing.
 3. `zk -W library topics` to see the existing topics. Reuse them. Create a new one only
    if none covers the content. Never plurals or synonyms of existing topics.
@@ -345,10 +371,18 @@ in notes stay valid. If the share is not mounted (the marker is missing),
    same entity. The title is the most common full name (e.g. "Ministero dell'Istruzione
    e del Merito", not "MIM"); acronyms and variants go in "Descrizione".
    Also find the document's date (date at the top, protocol, year of
-   publication): `YYYY-MM-DD`, `YYYY-MM` or `YYYY`, or `sconosciuta` (unknown) if
-   the text has none. Never use today's date or the file's date.
-5. Show me the title, the document's date, the chosen topics and why, and the
-   entities to create or update. Proceed after my confirmation.
+   publication): `YYYY-MM-DD`, `YYYY-MM` or `YYYY`, or, if the text has none,
+   `sconosciuta` (`it` wiki) or `unknown` (`en` wiki). Never use today's date or
+   the file's date.
+5. Show me:
+   - the title and the document's date;
+   - the 3-5 key points you intend to write in the summary and in the topic
+     syntheses, one line each, flagging those that contradict or update the wiki;
+   - the chosen topics and why;
+   - the entities to create or update.
+
+   Ask me what to stress and what to leave out. Proceed after my confirmation,
+   following my directions on what to emphasize.
 6. Source note, with the id printed by `wizki extract` as `<sha>`:
    `zk -W library new sources --title "<title>" --extra sha=<sha> --print-path`
    (the file is named `<sha>-<title-slug>.md` and the SHA also goes into the
@@ -367,8 +401,10 @@ in notes stay valid. If the share is not mounted (the marker is missing),
    what it replaces. If it is older, don't overwrite the newer data: add its
    information as historical, dated ("in 2019 ...").
 8. For each entity: if it is missing, create it with
-   `zk -W library new entities --title "<Name>" --extra tipo=<type> --print-path`
-   (`<type>`: `persona`, `ente`, `luogo`, `norma`, `opera`, `evento`).
+   - `it` wiki: `zk -W library new entities --title "<Nome>" --extra tipo=<tipo> --print-path`
+     (`<tipo>`: `persona`, `ente`, `luogo`, `norma`, `opera`, `evento`);
+   - `en` wiki: `zk -W library new entities --title "<Name>" --extra type=<type> --print-path`
+     (`<type>`: `person`, `organization`, `place`, `law`, `work`, `event`).
    Add under "Nelle fonti" (In the sources) what this source says, citing it; update
    "Descrizione" (Description) and `summary:`; flag "Contraddizioni" between sources.
    Dates matter as for topics: older data stays, dated, as history.
@@ -391,6 +427,11 @@ A single source may touch 10-15 pages: that's normal.
 2. Then read the topics and entities (`zk -W library by <topic>`,
    `zk -W library list --link-to topics/<topic>.md`, `zk -W library list --link-to entities/<entity>.md`),
    and finally the sources.
+   If the index is not enough (a precise name or term, a page whose name you
+   don't know), search the text:
+   - in the wiki pages: `zk -W library list --match "<terms>"` (prefixes work
+     too, e.g. `"lesson*"`);
+   - in the text of the sources: `rg -i "<terms>" library/raw/text/`.
 3. Answer citing the pages with full wikilinks (path and title).
 4. If the answer is reusable (a comparison, a synthesis across topics, a
    non-obvious connection), offer to save it as an analysis. If an analysis on
@@ -445,6 +486,8 @@ A single source may touch 10-15 pages: that's normal.
    - **Analyses to review**: for those flagged as `info`, read the new sources and
      say whether they change them; propose the update as in step 5 of "Query".
    - **New questions and sources**: propose 3-5 questions to dig into and sources to look for.
+   - **Schema**: cases these rules don't cover or that keep recurring; propose the
+     change to this file (see the last rule).
 3. Present a report: each problem with page, reason and proposed fix.
    Apply nothing without my confirmation. The questions I approve go into
    "Domande aperte" (Open questions) in `overview.md`. After the fixes, `./bin/wizki index`.
@@ -467,7 +510,13 @@ A single source may touch 10-15 pages: that's normal.
 - `log.md` and `index.md` are excluded from the zk index (see `exclude` in `.zk/config.toml`):
   otherwise the index, which links everything, would hide orphan notes.
 - Never edit `index.md` by hand: it is regenerated with `./bin/wizki index`
-  from `title:`, `summary:`, `tipo:`, `date:`, `published:` and the links of the sources.
+  from `title:`, `summary:`, `tipo:` (or `type:`), `date:`, `published:` and the links of the sources.
 - Always run zk from the repo root with `zk -W library ...`, never `cd library && zk`.
   `ZK_NOTEBOOK_DIR` points to another notebook, and `--notebook-dir` alone is not enough:
   `zk new <folder>` resolves the folder against the current directory.
+- This schema evolves with use. If you notice a case the rules don't cover or
+  that keeps recurring (a new kind of source, a section that is always missing,
+  a rule that produces wrong pages or duplicates), at the end of the operation
+  propose the change to this file, with the exact text and the reason. Don't
+  change it without my confirmation; afterwards, update both halves (Italian and
+  English) and, if the rule affects the commands, `.claude/commands/`.
