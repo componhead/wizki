@@ -296,7 +296,7 @@ func TestInitCreaLaWiki(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	for _, p := range []string{"inbox", "raw/pdf", "raw/text", "sources", "topics", ".git"} {
+	for _, p := range []string{".", "inbox", "raw", "raw/pdf", "raw/text", "sources", "topics", ".zk", ".zk/templates", ".git"} {
 		if fi, err := os.Stat(filepath.Join("mia", p)); err != nil || !fi.IsDir() {
 			t.Errorf("manca la cartella %s", p)
 		}

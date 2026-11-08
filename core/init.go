@@ -53,20 +53,35 @@ func LogHeader(name string) []byte {
 	return []byte("# Log: " + name + "\n\n")
 }
 
-// PlanInit pianifica la creazione della wiki <name>/: le cartelle di WikiDirs
-// (ognuna con un .gitkeep),
+// PlanInit pianifica la creazione della wiki <name>/: le cartelle di WikiDirs,
 // i file della configurazione zk (path relativo alla radice -> contenuto),
 // log.md, .gitignore e infine il repository git.
+// Ogni cartella creata, radice e cartelle intermedie comprese, riceve un
+// .gitkeep, una volta sola.
 // I file vengono in ordine di path, così il piano è deterministico.
 func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
 	if err := ValidWikiName(name); err != nil {
 		return nil, err
 	}
-	steps := []Step{Mkdir{name}}
-	// .gitkeep: git non traccia le cartelle vuote, così sopravvivono a un clone
-	for _, d := range WikiDirs {
-		dir := filepath.Join(name, d)
+	var steps []Step
+	seen := map[string]bool{}
+	// mkdir crea rel (relativa alla radice) e i suoi genitori, ciascuno con un
+	// .gitkeep: git non traccia le cartelle vuote, così sopravvivono a un clone.
+	var mkdir func(rel string)
+	mkdir = func(rel string) {
+		if seen[rel] {
+			return
+		}
+		seen[rel] = true
+		if rel != "." {
+			mkdir(filepath.Dir(rel))
+		}
+		dir := filepath.Join(name, rel)
 		steps = append(steps, Mkdir{dir}, WriteFile{Path: filepath.Join(dir, ".gitkeep")})
+	}
+	mkdir(".")
+	for _, d := range WikiDirs {
+		mkdir(d)
 	}
 	rels := make([]string, 0, len(zkFiles))
 	for rel := range zkFiles {
@@ -74,8 +89,8 @@ func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
 	}
 	sort.Strings(rels)
 	for _, rel := range rels {
-		p := filepath.Join(name, rel)
-		steps = append(steps, Mkdir{filepath.Dir(p)}, WriteFile{Path: p, Data: zkFiles[rel]})
+		mkdir(filepath.Dir(rel))
+		steps = append(steps, WriteFile{Path: filepath.Join(name, rel), Data: zkFiles[rel]})
 	}
 	steps = append(steps,
 		WriteFile{Path: filepath.Join(name, "log.md"), Data: LogHeader(name)},

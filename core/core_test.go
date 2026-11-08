@@ -185,14 +185,17 @@ func TestPlanInit(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Step{
-		Mkdir{"w"},
+		Mkdir{"w"}, WriteFile{Path: "w/.gitkeep"},
 		Mkdir{"w/inbox"}, WriteFile{Path: "w/inbox/.gitkeep"},
+		Mkdir{"w/raw"}, WriteFile{Path: "w/raw/.gitkeep"},
 		Mkdir{"w/raw/pdf"}, WriteFile{Path: "w/raw/pdf/.gitkeep"},
 		Mkdir{"w/raw/text"}, WriteFile{Path: "w/raw/text/.gitkeep"},
 		Mkdir{"w/sources"}, WriteFile{Path: "w/sources/.gitkeep"},
 		Mkdir{"w/topics"}, WriteFile{Path: "w/topics/.gitkeep"},
-		Mkdir{"w/.zk"}, WriteFile{"w/.zk/config.toml", []byte("C")},
-		Mkdir{"w/.zk/templates"}, WriteFile{"w/.zk/templates/t.md", []byte("T")},
+		Mkdir{"w/.zk"}, WriteFile{Path: "w/.zk/.gitkeep"},
+		WriteFile{"w/.zk/config.toml", []byte("C")},
+		Mkdir{"w/.zk/templates"}, WriteFile{Path: "w/.zk/templates/.gitkeep"},
+		WriteFile{"w/.zk/templates/t.md", []byte("T")},
 		WriteFile{"w/log.md", []byte("# Log: w\n\n")},
 		WriteFile{"w/.gitignore", WikiGitignore},
 		GitInit{"w"},
