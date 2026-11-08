@@ -126,3 +126,52 @@ func TestLangs(t *testing.T) {
 		t.Errorf("missing = %v", m)
 	}
 }
+
+// TestShortID: prefisso di IDLen caratteri, input corti restituiti invariati.
+func TestShortID(t *testing.T) {
+	if got := ShortID("39a364a0ffff"); got != "39a364a0" {
+		t.Errorf("ShortID = %q", got)
+	}
+	if got := ShortID("abc"); got != "abc" {
+		t.Errorf("ShortID corto = %q", got)
+	}
+}
+
+// TestFindDuplicate: trova per contenuto, primo path in ordine alfabetico.
+func TestFindDuplicate(t *testing.T) {
+	known := map[string]string{"b.pdf": "h1", "a.pdf": "h1", "c.pdf": "h2"}
+	if p, ok := FindDuplicate("h1", known); !ok || p != "a.pdf" {
+		t.Errorf("got %q %v", p, ok)
+	}
+	if _, ok := FindDuplicate("h3", known); ok {
+		t.Error("falso positivo")
+	}
+}
+
+// TestFrontmatterField: legge solo dentro il frontmatter, toglie le virgolette.
+func TestFrontmatterField(t *testing.T) {
+	cases := map[string]string{
+		"---\nid: 1a2b3c4d\ntitle: x\n---\n": "1a2b3c4d",
+		"---\r\nid: \"1a2b\"\r\n---\r\n":     "1a2b",
+		"---\ntitle: x\n---\nid: fuori\n":    "",
+		"id: senza-frontmatter\n":            "",
+		"---\nid:\n---\n":                    "",
+	}
+	for in, want := range cases {
+		if got := FrontmatterField(in, "id"); got != want {
+			t.Errorf("FrontmatterField(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestIDFindings: id duplicati e mancanti sono warn, id unici no.
+func TestIDFindings(t *testing.T) {
+	got := IDFindings(map[string]string{"s/a.md": "x", "s/b.md": "x", "s/c.md": "", "s/d.md": "y"})
+	want := []Finding{
+		{"warn", "id x", "stesso PDF in più note: s/a.md, s/b.md"},
+		{"warn", "s/c.md", "id mancante nel frontmatter"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v", got)
+	}
+}

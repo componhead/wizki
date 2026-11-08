@@ -26,6 +26,16 @@ func do(t *testing.T, args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// extractOut separa l'output di extract: path del testo e id del PDF.
+func extractOut(t *testing.T, out string) (path, id string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("attese 2 righe (path, id), out = %q", out)
+	}
+	return lines[0], lines[1]
+}
+
 func TestLintConFakeZk(t *testing.T) {
 	root := t.TempDir()
 	for _, f := range []string{"topics/scuola.md", "topics/economia.md"} {
@@ -69,8 +79,13 @@ func TestExtractConFakePdftotext(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	if want := filepath.Join(root, "raw", "text", "circolare-2026.md"); strings.TrimSpace(out) != want {
-		t.Errorf("out = %q, want %q", out, want)
+	path, id := extractOut(t, out)
+	if want := filepath.Join(root, "raw", "text", "circolare-2026.md"); path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+	// sha256("%PDF-finto")
+	if want := "39a364a0"; id != want {
+		t.Errorf("id = %q, want %q", id, want)
 	}
 	if _, err := os.Stat(filepath.Join(root, "raw", "pdf", "circolare-2026.pdf")); err != nil {
 		t.Error("PDF non spostato in raw/pdf")
@@ -129,7 +144,8 @@ func TestExtractOCRFallback(t *testing.T) {
 	if !strings.Contains(errb, "OCR") {
 		t.Errorf("atteso avviso OCR su stderr: %q", errb)
 	}
-	b, err := os.ReadFile(strings.TrimSpace(out))
+	path, _ := extractOut(t, out)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,6 +203,76 @@ func TestExtractNonSovrascrive(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(root, "raw", "pdf", "a.pdf"))
 	if string(b) != "vecchio" {
 		t.Error("raw/ è stato modificato")
+	}
+}
+
+// Stesso contenuto, nome diverso: exit 5, il PDF resta dov'è e raw/ non cambia.
+func TestExtractDuplicatoConNomeDiverso(t *testing.T) {
+	root := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "circolare.pdf"), []byte("%PDF-finto"), 0o644)
+	pdf := filepath.Join(t.TempDir(), "Copia di circolare.PDF")
+	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
+	fakeBin(t, "pdftotext", `printf 'x' > "$3"`)
+
+	code, out, errb := do(t, "-root", root, "extract", pdf)
+	if code != 5 || !strings.Contains(errb, "circolare.pdf") || !strings.Contains(errb, "39a364a0") {
+		t.Errorf("code=%d out=%q err=%q", code, out, errb)
+	}
+	if _, err := os.Stat(pdf); err != nil {
+		t.Error("il duplicato doveva restare nella posizione originale")
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, "raw", "pdf"))
+	if len(entries) != 1 {
+		t.Errorf("raw/pdf modificato: %d file", len(entries))
+	}
+	if _, err := os.Stat(filepath.Join(root, "raw", "text")); err == nil {
+		t.Error("raw/text non doveva essere creato")
+	}
+}
+
+// Contenuto diverso: nessun falso positivo anche se raw/pdf non è vuoto.
+func TestExtractContenutoDiversoNonEDuplicato(t *testing.T) {
+	root := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "altro.pdf"), []byte("%PDF-altro"), 0o644)
+	pdf := filepath.Join(t.TempDir(), "nuovo.pdf")
+	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
+	fakeBin(t, "pdftotext", `printf 'x' > "$3"`)
+	if code, _, errb := do(t, "-root", root, "extract", pdf); code != 0 {
+		t.Errorf("code=%d err=%q", code, errb)
+	}
+}
+
+// Lint: id duplicati e id mancanti nelle note-fonte.
+func TestLintIdFonti(t *testing.T) {
+	root := t.TempDir()
+	notes := map[string]string{
+		"sources/39a364a0-circolare.md":       "---\nid: 39a364a0\ntitle: Circolare\n---\n",
+		"sources/39a364a0-copia-circolare.md": "---\nid: 39a364a0\ntitle: Copia\n---\n",
+		"sources/senza-id.md":                 "---\ntitle: Senza id\n---\n",
+		"sources/ok.md":                       "---\nid: deadbeef\n---\n",
+	}
+	for f, c := range notes {
+		p := filepath.Join(root, f)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(c), 0o644)
+	}
+	fakeBin(t, "zk", ":")
+	code, out, _ := do(t, "-root", root, "lint")
+	if code != 1 {
+		t.Errorf("exit = %d, atteso 1\n%s", code, out)
+	}
+	for _, want := range []string{
+		"id 39a364a0: stesso PDF in più note: sources/39a364a0-circolare.md, sources/39a364a0-copia-circolare.md",
+		"sources/senza-id.md: id mancante nel frontmatter",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("manca %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "deadbeef") {
+		t.Errorf("id unico segnalato per errore:\n%s", out)
 	}
 }
 

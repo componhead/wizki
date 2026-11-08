@@ -1,4 +1,5 @@
 ---
+id: {{extra.sha}}
 title: {{title}}
 date: {{format-date now '%Y-%m-%d'}}
 pdf: raw/pdf/

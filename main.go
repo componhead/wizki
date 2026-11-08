@@ -1,11 +1,13 @@
-// wiki: strumento di supporto per un notebook zk (pattern "LLM Wiki").
+// wizki: strumento di supporto per un notebook zk (pattern "LLM Wiki").
 //
-//	wiki [-root library] [-ocr-lang ita] [-no-ocr] extract <file.pdf>
-//	                                              sposta in raw/pdf ed estrae il testo (OCR se scansione)
-//	exit: 0 ok, 1 errore, 2 uso, 3 nessun testo (anche con OCR), 4 OCR non disponibile
-//	wiki [-root library] log <ingest|query|lint> <titolo>
-//	wiki [-root library] lint                     controlli di salute (exit 1 se ci sono warn)
-//	wiki slug <testo>
+//	wizki [-root library] [-ocr-lang ita] [-no-ocr] extract <file.pdf>
+//	                                              sposta in raw/pdf ed estrae il testo (OCR se scansione);
+//	                                              stampa il path del testo e, sulla riga dopo, l'id (SHA-256, 8 hex)
+//	exit: 0 ok, 1 errore, 2 uso, 3 nessun testo (anche con OCR), 4 OCR non disponibile,
+//	      5 PDF già acquisito (stesso contenuto di un file in raw/pdf, anche con nome diverso)
+//	wizki [-root library] log <ingest|query|lint> <titolo>
+//	wizki [-root library] lint                     controlli di salute (exit 1 se ci sono warn)
+//	wizki slug <testo>
 package main
 
 import (
@@ -27,7 +29,7 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out, errw io.Writer) int {
-	fs := flag.NewFlagSet("wiki", flag.ContinueOnError)
+	fs := flag.NewFlagSet("wizki", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	root := fs.String("root", envOr("WIKI_ROOT", "library"), "radice del notebook zk")
 	ocrLang := fs.String("ocr-lang", envOr("WIKI_OCR_LANG", "ita"), "lingua/e Tesseract (es. ita, ita+eng)")
@@ -37,7 +39,7 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(errw, "uso: wiki [-root dir] extract|log|lint|slug ...")
+		fmt.Fprintln(errw, "uso: wizki [-root dir] extract|log|lint|slug ...")
 		return 2
 	}
 
@@ -45,19 +47,19 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	code := 0
 	switch rest[0] {
 	case "extract":
-		err = need(rest, 2, "wiki extract <file.pdf>")
+		err = need(rest, 2, "wizki extract <file.pdf>")
 		if err == nil {
 			err = extract(ctx, *root, rest[1], *ocrLang, *noOCR, out, errw)
 		}
 	case "log":
-		err = need(rest, 3, "wiki log <ingest|query|lint> <titolo>")
+		err = need(rest, 3, "wizki log <ingest|query|lint> <titolo>")
 		if err == nil {
 			err = logEntry(*root, rest[1], strings.Join(rest[2:], " "), out)
 		}
 	case "lint":
 		code, err = lint(ctx, *root, out)
 	case "slug":
-		err = need(rest, 2, "wiki slug <testo>")
+		err = need(rest, 2, "wizki slug <testo>")
 		if err == nil {
 			fmt.Fprintln(out, core.Slug(strings.Join(rest[1:], " ")))
 		}
@@ -72,6 +74,9 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 		if errors.Is(err, fx.ErrOCRUnavailable) {
 			return 4
 		}
+		if errors.Is(err, fx.ErrDuplicate) {
+			return 5
+		}
 		return 1
 	}
 	return code
@@ -81,6 +86,18 @@ func extract(ctx context.Context, root, pdf, lang string, noOCR bool, out, errw 
 	steps, err := core.PlanExtract(root, pdf)
 	if err != nil {
 		return err
+	}
+	// controllo sul contenuto, prima di toccare raw/: il nome del file non conta
+	sum, err := fx.HashFile(pdf)
+	if err != nil {
+		return err
+	}
+	known, err := fx.HashPDFs(filepath.Join(root, "raw", "pdf"))
+	if err != nil {
+		return err
+	}
+	if dup, ok := core.FindDuplicate(sum, known); ok {
+		return fmt.Errorf("%w: stesso contenuto di %s (id %s)", fx.ErrDuplicate, dup, core.ShortID(sum))
 	}
 	rollback := func(upTo int) {
 		for j := upTo; j >= 0; j-- {
@@ -118,6 +135,7 @@ func extract(ctx context.Context, root, pdf, lang string, noOCR bool, out, errw 
 		dest = last.Out
 	}
 	fmt.Fprintln(out, dest)
+	fmt.Fprintln(out, core.ShortID(sum))
 	return nil
 }
 
@@ -156,7 +174,12 @@ func lint(ctx context.Context, root string, out io.Writer) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	ids, err := fx.SourceIDs(root)
+	if err != nil {
+		return 1, err
+	}
 	all := append(append(core.NearDuplicates(topics), perTopic...), core.Orphans(orphans)...)
+	all = append(all, core.IDFindings(ids)...)
 	for _, f := range all {
 		fmt.Fprintf(out, "[%s] %s: %s\n", f.Level, f.Subject, f.Msg)
 	}

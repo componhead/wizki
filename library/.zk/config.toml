@@ -4,7 +4,9 @@
 [note]
 language = "it"
 default-title = "Senza titolo"
-filename = "{{format-date now '%Y%m%d'}}-{{slug title}}"
+# Fonti: <sha>-<slug>, sha = primi 8 hex dello SHA-256 del PDF in raw/pdf/,
+# passato con `zk new sources --extra sha=<sha>`.
+filename = "{{extra.sha}}-{{slug title}}"
 extension = "md"
 template = "source.md"
 exclude = ["raw/**", "log.md"]

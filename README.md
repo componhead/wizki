@@ -13,31 +13,34 @@ topic views are `zk` queries rather than folders.
 
 ## Build
 
-    go build -o wiki .
+    go build -o bin/wizki .
 
 Prerequisites: Go 1.24+, `pdftotext` and `pdftoppm` (poppler), `tesseract` with the
 `ita` language pack (only for scans), `zk` in the `PATH` (for `lint`).
 
 ## Usage
 
-    wiki [-root library] [-ocr-lang ita] [-no-ocr] extract <file.pdf>
-    wiki [-root library] log <ingest|query|lint> <title>
-    wiki [-root library] lint
-    wiki slug <text>
+    wizki [-root library] [-ocr-lang ita] [-no-ocr] extract <file.pdf>
+    wizki [-root library] log <ingest|query|lint> <title>
+    wizki [-root library] lint
+    wizki slug <text>
 
 - `extract`: moves the PDF into `raw/pdf/` and extracts its text into `raw/text/`,
-  printing the text path. Scanned PDFs are read with OCR automatically
-  (disable with `-no-ocr`). It refuses to overwrite existing files.
+  printing the text path and, on the next line, the PDF's id (first 8 hex chars
+  of its SHA-256). Scanned PDFs are read with OCR automatically
+  (disable with `-no-ocr`). It refuses to overwrite existing files and refuses a
+  PDF whose content is already in `raw/pdf/`, whatever its file name.
 - `log`: appends an entry to `library/log.md`.
 - `lint`: wiki health checks (tags without links and vice versa, plural or synonym
-  topics, orphan notes, topics with a single source).
+  topics, orphan notes, topics with a single source, missing or duplicate
+  `id:` among source notes).
 - `slug`: prints the slug of a text.
 
 `-root` and `-ocr-lang` can also be set with the `WIKI_ROOT` and `WIKI_OCR_LANG`
 environment variables.
 
 Exit codes: 0 ok, 1 error (or `lint` warnings), 2 usage, 3 no text (even with OCR),
-4 OCR not available.
+4 OCR not available, 5 PDF already ingested.
 
 ## Layout
 

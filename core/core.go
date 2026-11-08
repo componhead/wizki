@@ -111,10 +111,13 @@ func (Mkdir) isStep()   {}
 func (Move) isStep()    {}
 func (Extract) isStep() {}
 
+// IsPDF: il nome file ha estensione .pdf (maiuscole comprese).
+func IsPDF(name string) bool { return strings.EqualFold(filepath.Ext(name), ".pdf") }
+
 // PlanExtract: il PDF diventa immutabile in raw/pdf/, il testo in raw/text/.
 func PlanExtract(root, pdfPath string) ([]Step, error) {
 	base := filepath.Base(pdfPath)
-	if !strings.EqualFold(filepath.Ext(base), ".pdf") {
+	if !IsPDF(base) {
 		return nil, fmt.Errorf("%q non è un PDF", base)
 	}
 	stem := Slug(strings.TrimSuffix(base, filepath.Ext(base)))
@@ -225,4 +228,74 @@ func lev(a, b string) int {
 		prev = cur
 	}
 	return prev[len(rb)]
+}
+
+// -------------------------------------------------------------------- id
+
+// IDLen è la lunghezza dell'id di una nota-fonte: prefisso dello SHA-256 del PDF.
+const IDLen = 8
+
+// ShortID riduce uno SHA-256 esadecimale all'id della nota-fonte.
+func ShortID(sum string) string {
+	if len(sum) < IDLen {
+		return sum
+	}
+	return sum[:IDLen]
+}
+
+// FindDuplicate cerca sum tra gli hash noti (path -> SHA-256 completo) e
+// restituisce il primo path, in ordine alfabetico, con lo stesso contenuto.
+func FindDuplicate(sum string, known map[string]string) (string, bool) {
+	paths := make([]string, 0, len(known))
+	for p := range known {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		if known[p] == sum {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// FrontmatterField legge un campo scalare dal frontmatter YAML (tra due righe
+// "---" in testa al file). Restituisce "" se il frontmatter o il campo mancano.
+func FrontmatterField(content, key string) string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return ""
+	}
+	for _, l := range lines[1:] {
+		if strings.TrimSpace(l) == "---" {
+			return ""
+		}
+		k, v, ok := strings.Cut(l, ":")
+		if ok && strings.TrimSpace(k) == key {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
+}
+
+// IDFindings controlla gli id delle note-fonte (path -> id): segnala id
+// mancanti e id condivisi da più note, cioè lo stesso PDF acquisito due volte.
+func IDFindings(ids map[string]string) []Finding {
+	byID := map[string][]string{}
+	var fs []Finding
+	for p, id := range ids {
+		if id == "" {
+			fs = append(fs, Finding{"warn", p, "id mancante nel frontmatter"})
+			continue
+		}
+		byID[id] = append(byID[id], p)
+	}
+	for id, ps := range byID {
+		if len(ps) > 1 {
+			sort.Strings(ps)
+			fs = append(fs, Finding{"warn", "id " + id, "stesso PDF in più note: " + strings.Join(ps, ", ")})
+		}
+	}
+	sort.Slice(fs, func(i, j int) bool { return fs[i].Subject < fs[j].Subject })
+	return fs
 }
