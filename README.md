@@ -630,6 +630,10 @@ To avoid typing it every time, the choice can be set once for the whole terminal
 session, with `export WIKI_ROOT=viaggio-giappone` (or `set -x WIKI_ROOT
 viaggio-giappone` in the Fish shell).
 
+Without `-root` and `WIKI_ROOT`, wizki uses the current folder if it is a wiki
+(it contains `.zk/config.toml`), otherwise `library/`. So, from inside the wiki
+folder, plain `wizki lint` is enough.
+
 ### 11. After updating wizki
 
 Months later, Giulia downloads a newer version of this project, which has new
@@ -785,7 +789,7 @@ exactly as it was. Here are the messages you're most likely to meet:
 | `… esiste già: raw/ è immutabile, non sovrascrivo` | *Already exists: raw/ cannot be changed, I won't overwrite.* A file with the same name is already in the safe. | Rename the new document and try again. |
 | `manca git, che serve a init: installalo e rilancia (non ho creato nulla)` | *git is missing, and init needs it: install it and try again (nothing was created).* | Install git (`wizki deps` shows the command), then run `init` again. |
 | `raw remoto non raggiungibile: … la condivisione è montata?` | *Remote raw unreachable: is the share mounted?* The network folder holding the originals isn't available. Nothing was moved. | Switch on or connect the NAS (or reconnect to the network), then try again. |
-| `… non sembra una wiki (manca .zk/config.toml): per crearne una usa wizki init` | *This doesn't look like a wiki.* `upgrade` was pointed at the wrong folder. | Check the `-root` name; use `init` for a brand-new wiki. |
+| `<absolute path> non sembra una wiki (manca .zk/config.toml): per crearne una usa wizki init` | *This doesn't look like a wiki.* The command was pointed at the wrong folder; the message shows the absolute path it checked. | Check the `-root` name (a relative path starts from the current folder); use `init` for a brand-new wiki. |
 
 ---
 

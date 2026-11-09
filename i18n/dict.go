@@ -15,7 +15,6 @@ type Dict struct {
 	ErrorPrefix                                  string
 	UnknownLocale                                string // codice, codici disponibili
 	WikiLocaleUnsupported                        string // codice della wiki, codice usato
-	NotAWiki                                     string // radice
 	NotAWikiInit                                 string // radice
 	DryRun                                       string
 	PlanCreateDir, PlanCreate                    string // path
@@ -174,7 +173,6 @@ var IT = Dict{
 	ErrorPrefix:           "errore:",
 	UnknownLocale:         "lingua %q non disponibile (disponibili: %s)",
 	WikiLocaleUnsupported: "la wiki è in lingua %q, che wizki non ha: uso %s",
-	NotAWiki:              "%s non sembra una wiki (manca .zk/config.toml)",
 	NotAWikiInit:          "%s non sembra una wiki (manca .zk/config.toml): per crearne una usa wizki init",
 	DryRun:                "prova: nessuna modifica. Rilancia con -apply per applicare:",
 	PlanCreateDir:         "crea: %s/",
@@ -343,7 +341,6 @@ var EN = Dict{
 	ErrorPrefix:           "error:",
 	UnknownLocale:         "language %q not available (available: %s)",
 	WikiLocaleUnsupported: "the wiki's language is %q, which wizki doesn't have: using %s",
-	NotAWiki:              "%s doesn't look like a wiki (.zk/config.toml is missing)",
 	NotAWikiInit:          "%s doesn't look like a wiki (.zk/config.toml is missing): to create one use wizki init",
 	DryRun:                "dry run: nothing changed. Run again with -apply to apply:",
 	PlanCreateDir:         "create: %s/",

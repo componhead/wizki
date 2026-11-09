@@ -32,6 +32,20 @@ func do(t *testing.T, args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// wikiDir crea una cartella temporanea che wizki riconosce come wiki: contiene
+// solo .zk/config.toml (vuoto, quindi lingua di default).
+func wikiDir(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".zk"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".zk", "config.toml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 // extractOut separa l'output di extract: path del testo e id del PDF.
 func extractOut(t *testing.T, out string) (path, id string) {
 	t.Helper()
@@ -43,7 +57,7 @@ func extractOut(t *testing.T, out string) (path, id string) {
 }
 
 func TestLintConFakeZk(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	for _, f := range []string{"topics/scuola.md", "topics/economia.md"} {
 		p := filepath.Join(root, f)
 		_ = os.MkdirAll(filepath.Dir(p), 0o755)
@@ -76,7 +90,7 @@ esac
 }
 
 func TestExtractConFakePdftotext(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	pdf := filepath.Join(t.TempDir(), "Circolare 2026.pdf")
 	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
 	fakeBin(t, "pdftotext", fakePdftotextPagina)
@@ -108,7 +122,7 @@ const fakePdftotextPagina = `printf 'Circolare sugli orari delle lezioni: dal pr
 // scanFixture: pdf finto + pdftotext che non estrae nulla.
 func scanFixture(t *testing.T) (root, pdf string) {
 	t.Helper()
-	root = t.TempDir()
+	root = wikiDir(t)
 	pdf = filepath.Join(t.TempDir(), "scan.pdf")
 	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
 	fakeBin(t, "pdftotext", `: > "$3"`)
@@ -204,7 +218,7 @@ func TestExtractOCRErroreDiPdftoppmFaRollback(t *testing.T) {
 // come una scansione con un livello di testo minimo.
 func scantFixture(t *testing.T) (root, pdf string) {
 	t.Helper()
-	root = t.TempDir()
+	root = wikiDir(t)
 	pdf = filepath.Join(t.TempDir(), "scan.pdf")
 	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
 	fakeBin(t, "pdftotext", `printf '1\f2\f10\f' > "$3"`)
@@ -296,7 +310,7 @@ func assertNessunTemporaneo(t *testing.T, dir string) {
 }
 
 func TestExtractNonSovrascrive(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "a.pdf"), []byte("vecchio"), 0o644)
 	pdf := filepath.Join(t.TempDir(), "a.pdf")
@@ -313,7 +327,7 @@ func TestExtractNonSovrascrive(t *testing.T) {
 
 // Stesso contenuto, nome diverso: exit 5, il PDF resta dov'è e raw/ non cambia.
 func TestExtractDuplicatoConNomeDiverso(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "circolare.pdf"), []byte("%PDF-finto"), 0o644)
 	pdf := filepath.Join(t.TempDir(), "Copia di circolare.PDF")
@@ -338,7 +352,7 @@ func TestExtractDuplicatoConNomeDiverso(t *testing.T) {
 
 // Contenuto diverso: nessun falso positivo anche se raw/pdf non è vuoto.
 func TestExtractContenutoDiversoNonEDuplicato(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "altro.pdf"), []byte("%PDF-altro"), 0o644)
 	pdf := filepath.Join(t.TempDir(), "nuovo.pdf")
@@ -351,7 +365,7 @@ func TestExtractContenutoDiversoNonEDuplicato(t *testing.T) {
 
 // Lint: id duplicati e id mancanti nelle note-fonte.
 func TestLintIdFonti(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	notes := map[string]string{
 		"sources/39a364a0-circolare.md":       "---\nid: 39a364a0\ntitle: Circolare\n---\n",
 		"sources/39a364a0-copia-circolare.md": "---\nid: 39a364a0\ntitle: Copia\n---\n",
@@ -382,7 +396,7 @@ func TestLintIdFonti(t *testing.T) {
 }
 
 func TestLogAppendOnly(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	for _, title := range []string{"Primo", "Secondo"} {
 		if code, _, errb := do(t, "-root", root, "log", "ingest", title); code != 0 {
 			t.Fatalf("exit %d: %s", code, errb)
@@ -473,7 +487,7 @@ func TestInitNomeNonValido(t *testing.T) {
 // TestIndexPoiLintSenzaWarn: `wizki index` scrive un indice che il lint
 // considera aggiornato; la panoramica senza link in entrata non è orfana.
 func TestIndexPoiLintSenzaWarn(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	notes := map[string]string{
 		"overview.md":          "---\ntitle: Panoramica\nsummary: tesi\n---\n[[topics/scuola|scuola]]\n",
 		"topics/scuola.md":     "---\ntitle: scuola\nsummary: la scuola\n---\n",
@@ -586,7 +600,7 @@ func TestUpgradeNonWiki(t *testing.T) {
 // TestExtractDocConImmagini: un .md della inbox va in raw/doc con le sue
 // immagini locali; il testo punta ai nuovi path; l'id è lo SHA del .md.
 func TestExtractDocConImmagini(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	in := filepath.Join(root, "inbox")
 	_ = os.MkdirAll(filepath.Join(in, "img"), 0o755)
 	_ = os.WriteFile(filepath.Join(in, "img", "Foto 1.png"), []byte("PNG"), 0o644)
@@ -617,7 +631,7 @@ func TestExtractDocConImmagini(t *testing.T) {
 // TestExtractDestinazioneEsistenteNonToccaNulla: se il testo esiste già in
 // raw/text, niente viene spostato (né la fonte né le sue immagini).
 func TestExtractDestinazioneEsistenteNonToccaNulla(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	in := filepath.Join(root, "inbox")
 	_ = os.MkdirAll(in, 0o755)
 	_ = os.WriteFile(filepath.Join(in, "a.png"), []byte("PNG"), 0o644)
@@ -640,7 +654,7 @@ func TestExtractDestinazioneEsistenteNonToccaNulla(t *testing.T) {
 // TestExtractImmagineConOCR: l'immagine va in raw/assets, il testo ha il
 // riferimento e l'OCR; senza OCR solo il riferimento, con un avviso.
 func TestExtractImmagineConOCR(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	img := filepath.Join(t.TempDir(), "Cartello.PNG")
 	_ = os.WriteFile(img, []byte("PNG-1"), 0o644)
 	fakeBin(t, "tesseract", `case "$1" in
@@ -669,7 +683,7 @@ esac
 // TestExtractDuplicatoTraTipi: lo stesso contenuto già acquisito con un altro
 // nome (in raw/doc) è un duplicato anche se cambia l'estensione del tipo doc.
 func TestExtractDuplicatoTraTipi(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	a := filepath.Join(t.TempDir(), "a.md")
 	_ = os.WriteFile(a, []byte("uguale\n"), 0o644)
 	if code, _, errb := do(t, "-root", root, "extract", a); code != 0 {
@@ -684,7 +698,7 @@ func TestExtractDuplicatoTraTipi(t *testing.T) {
 
 // TestExtractVuotoETipoIgnoto: testo vuoto -> 3, tipo non supportato -> 1; la fonte resta.
 func TestExtractVuotoETipoIgnoto(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	v := filepath.Join(t.TempDir(), "v.txt")
 	_ = os.WriteFile(v, []byte("\n"), 0o644)
 	if code, _, _ := do(t, "-root", root, "extract", v); code != 3 {
@@ -704,7 +718,7 @@ func TestExtractVuotoETipoIgnoto(t *testing.T) {
 
 // TestInbox: elenco ordinato, senza le immagini allegate ai documenti.
 func TestInbox(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	in := filepath.Join(root, "inbox")
 	_ = os.MkdirAll(in, 0o755)
 	files := map[string]string{
@@ -1018,7 +1032,7 @@ func writeEpub(t *testing.T, dir, name string, drm bool) string {
 // TestExtractEpub: originale in raw/epub/, copertina in raw/assets/<stem>/,
 // testo con metadati e capitolo; la inbox lo elenca prima di acquisirlo.
 func TestExtractEpub(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	inboxDir := filepath.Join(root, "inbox")
 	_ = os.MkdirAll(inboxDir, 0o755)
 	src := writeEpub(t, inboxDir, "Il Libro.epub", false)
@@ -1055,7 +1069,7 @@ func TestExtractEpub(t *testing.T) {
 
 // TestExtractEpubDRM: exit 3, l'EPUB resta in inbox e raw/ non cambia.
 func TestExtractEpubDRM(t *testing.T) {
-	root := t.TempDir()
+	root := wikiDir(t)
 	src := writeEpub(t, t.TempDir(), "protetto.epub", true)
 	code, _, errb := do(t, "-root", root, "extract", src)
 	if code != 3 || !strings.Contains(errb, "DRM") {
@@ -1066,5 +1080,33 @@ func TestExtractEpubDRM(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "raw")); err == nil {
 		t.Error("raw/ non doveva essere creata")
+	}
+}
+
+// TestRootDefaultCartellaCorrente: senza -root né WIKI_ROOT, se la cartella
+// corrente è una wiki wizki lavora lì invece che in library/.
+func TestRootDefaultCartellaCorrente(t *testing.T) {
+	t.Setenv("WIKI_ROOT", "")
+	root := wikiDir(t)
+	if err := os.Mkdir(filepath.Join(root, "inbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
+	code, out, errb := do(t, "inbox")
+	if code != 0 {
+		t.Errorf("exit %d, out %q, err %q", code, out, errb)
+	}
+}
+
+// TestComandoSuNonWikiMostraPathAssoluto: un comando di wiki su una cartella
+// che non è una wiki si ferma subito e mostra il percorso assoluto cercato.
+func TestComandoSuNonWikiMostraPathAssoluto(t *testing.T) {
+	t.Setenv("WIKI_ROOT", "")
+	dir := t.TempDir()
+	t.Chdir(dir)
+	code, _, errb := do(t, "lint")
+	want := filepath.Join(dir, "library") + " non sembra una wiki"
+	if code != 1 || !strings.Contains(errb, want) {
+		t.Errorf("exit %d, err %q, voglio %q", code, errb, want)
 	}
 }

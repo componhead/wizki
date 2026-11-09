@@ -43,7 +43,7 @@ chiedendo conferma prima di lanciarlo; senza git si ferma. Lo stesso controllo s
 fa in ogni momento con `./bin/wizki deps`. Poi crea `./<nome>/` con questa
 struttura (un `.gitkeep` per cartella, `overview.md` vuota, `index.md` iniziale), `.zk/` (config e template della lingua scelta), `.gitignore`
 e un repository git (`git init -b master`). Non sovrascrive nulla: rilanciarlo
-completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`).
+completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`); senza nessuno dei due, wizki usa la cartella corrente se è una wiki, altrimenti `library/`.
 
 La lingua si sceglie alla creazione: `./bin/wizki init <nome> --locale en` (default
 `it`). Vale per tutto: config e template zk (in inglese da `locales/en/zk/`, in
@@ -302,7 +302,7 @@ asking for confirmation before running it; without git it stops. The same check
 can be run at any time with `./bin/wizki deps`. Then it creates `./<name>/` with this
 layout (a `.gitkeep` per folder, an empty `overview.md`, an initial `index.md`), `.zk/` (config and templates of the chosen language), `.gitignore`
 and a git repository (`git init -b master`). It never overwrites anything: running it
-again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_ROOT`).
+again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_ROOT`); with neither, wizki uses the current folder if it is a wiki, otherwise `library/`.
 
 The language is chosen at creation: `./bin/wizki init <name> --locale en` (default
 `it`). It covers everything: zk config and templates (English from `locales/en/zk/`,

@@ -26,6 +26,8 @@
 //	wizki init <nome> [--locale it|en]             controlla le dipendenze come deps (senza git si ferma), poi
 //	                                              crea la wiki ./<nome>/ (cartelle, .zk/, log.md, overview.md, index.md,
 //	                                              .gitignore, git init -b master); non sovrascrive nulla
+//	-root: senza -root né WIKI_ROOT vale la cartella corrente se è una wiki (.zk/config.toml), altrimenti library;
+//	       i comandi di wiki su una cartella che non è una wiki si fermano mostrando il percorso assoluto
 package main
 
 import (
@@ -74,7 +76,7 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	d := i18n.T()
 	fs := flag.NewFlagSet("wizki", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	root := fs.String("root", envOr("WIKI_ROOT", "library"), d.FlagRoot)
+	root := fs.String("root", defaultRoot(), d.FlagRoot)
 	ocrLang := fs.String("ocr-lang", envOr("WIKI_OCR_LANG", "ita"), d.FlagOCRLang)
 	noOCR := fs.Bool("no-ocr", false, d.FlagNoOCR)
 	locale := fs.String("locale", "", d.FlagLocale)
@@ -96,6 +98,10 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if wikiCommands[rest[0]] {
+		if !isWiki(*root) {
+			fmt.Fprintln(errw, d.ErrorPrefix, fmt.Sprintf(d.NotAWikiInit, displayPath(*root)))
+			return 1
+		}
 		useWikiLocale(*root, errw)
 		d = i18n.T()
 	}
@@ -555,9 +561,6 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 			return fmt.Errorf(d.Usage, d.UsageUpgrade)
 		}
 	}
-	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
-		return fmt.Errorf(d.NotAWikiInit, displayPath(root))
-	}
 	if err := fx.CheckRaw(root); err != nil {
 		return err
 	}
@@ -712,9 +715,6 @@ func rawRemote(ctx context.Context, root string, args []string, out io.Writer) e
 	if target == "" {
 		return fmt.Errorf(d.Usage, d.UsageRaw)
 	}
-	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
-		return fmt.Errorf(d.NotAWiki, displayPath(root))
-	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
 		return err
@@ -838,4 +838,22 @@ func displayPath(p string) string {
 		return abs
 	}
 	return p
+}
+
+// isWiki dice se root è una wiki, cioè se contiene .zk/config.toml.
+func isWiki(root string) bool {
+	return fx.Exists(filepath.Join(root, ".zk", "config.toml"))
+}
+
+// defaultRoot è la radice usata quando manca -root: WIKI_ROOT se impostata,
+// altrimenti la cartella corrente se è una wiki, altrimenti "library"
+// (la wiki dentro il repo di wizki).
+func defaultRoot() string {
+	if v := os.Getenv("WIKI_ROOT"); v != "" {
+		return v
+	}
+	if isWiki(".") {
+		return "."
+	}
+	return "library"
 }
