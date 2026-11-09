@@ -556,7 +556,7 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 		}
 	}
 	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
-		return fmt.Errorf(d.NotAWikiInit, root)
+		return fmt.Errorf(d.NotAWikiInit, displayPath(root))
 	}
 	if err := fx.CheckRaw(root); err != nil {
 		return err
@@ -713,7 +713,7 @@ func rawRemote(ctx context.Context, root string, args []string, out io.Writer) e
 		return fmt.Errorf(d.Usage, d.UsageRaw)
 	}
 	if !fx.Exists(filepath.Join(root, ".zk", "config.toml")) {
-		return fmt.Errorf(d.NotAWiki, root)
+		return fmt.Errorf(d.NotAWiki, displayPath(root))
 	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
@@ -828,4 +828,14 @@ func countWrites(steps []core.Step) int {
 		}
 	}
 	return n
+}
+
+// displayPath restituisce la forma assoluta di p, da mostrare nei messaggi
+// d'errore: con un -root relativo si vede subito dove wizki ha cercato.
+// Se il percorso assoluto non si può calcolare, restituisce p così com'è.
+func displayPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }
