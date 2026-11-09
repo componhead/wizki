@@ -2,6 +2,7 @@ package core
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -192,6 +193,7 @@ func TestPlanInit(t *testing.T) {
 		Mkdir{"w/raw/doc"}, WriteFile{Path: "w/raw/doc/.gitkeep"},
 		Mkdir{"w/raw/assets"}, WriteFile{Path: "w/raw/assets/.gitkeep"},
 		Mkdir{"w/raw/data"}, WriteFile{Path: "w/raw/data/.gitkeep"},
+		Mkdir{"w/raw/epub"}, WriteFile{Path: "w/raw/epub/.gitkeep"},
 		Mkdir{"w/raw/text"}, WriteFile{Path: "w/raw/text/.gitkeep"},
 		Mkdir{"w/sources"}, WriteFile{Path: "w/sources/.gitkeep"},
 		Mkdir{"w/topics"}, WriteFile{Path: "w/topics/.gitkeep"},
@@ -213,6 +215,36 @@ func TestPlanInit(t *testing.T) {
 	for _, bad := range []string{"", "  ", ".", "..", "a/b", `a\b`, "-x"} {
 		if _, err := PlanInit(bad, nil); err == nil {
 			t.Errorf("atteso errore per nome %q", bad)
+		}
+	}
+}
+
+// TestLetters: contano solo le lettere, in qualunque alfabeto.
+func TestLetters(t *testing.T) {
+	if got := Letters("Pagina 1 di 3 — Ωμέγα!"); got != 13 {
+		t.Errorf("got %d, want 13", got)
+	}
+}
+
+// TestScantText: una pagina con solo numero o filigrana è "senza testo";
+// basta metà delle pagine scarse per ripiegare sull'OCR.
+func TestScantText(t *testing.T) {
+	vera := strings.Repeat("parola ", 10) // 60 lettere
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"solo numero di pagina", "1\f2\f", true},
+		{"filigrana dello scanner", "Scanned with CamScanner\f", true},
+		{"una pagina vera", vera + "\f", false},
+		{"senza separatori", vera, false},
+		{"metà pagine scarse", vera + "\f3\f", true},
+		{"una scarsa su tre", vera + "\f" + vera + "\f3\f", false},
+	}
+	for _, c := range cases {
+		if got := ScantText(c.text); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }

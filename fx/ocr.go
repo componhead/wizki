@@ -108,3 +108,35 @@ func execImageText(ctx context.Context, s core.ImageText) error {
 	}
 	return Exec(ctx, core.WriteFile{Path: s.Out, Data: []byte(text)})
 }
+
+// ImproveWithOCR rifà con l'OCR il testo scarso già estratto da pdftotext in
+// s.Out e tiene la versione con più lettere. L'OCR scrive in un file
+// temporaneo accanto a s.Out (stesso filesystem, anche con raw/ in rete), che
+// sostituisce s.Out solo se è migliore. Restituisce true se ha usato l'OCR;
+// in caso di errore s.Out resta com'era.
+func ImproveWithOCR(ctx context.Context, s core.OCR) (bool, error) {
+	old, err := os.ReadFile(s.Out)
+	if err != nil {
+		return false, err
+	}
+	f, err := os.CreateTemp(filepath.Dir(s.Out), ".ocr-*.txt")
+	if err != nil {
+		return false, err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Close(); err != nil {
+		return false, err
+	}
+	if err := execOCR(ctx, core.OCR{PDF: s.PDF, Out: tmp, Lang: s.Lang}); err != nil {
+		return false, err
+	}
+	ocr, err := os.ReadFile(tmp)
+	if err != nil {
+		return false, err
+	}
+	if core.Letters(string(ocr)) <= core.Letters(string(old)) {
+		return false, nil
+	}
+	return true, os.Rename(tmp, s.Out)
+}

@@ -31,6 +31,15 @@ type Dict struct {
 	DuplicateOf   string // errore, path, id
 	RawImmutable  string // path
 	TryOCR        string // lingua OCR
+	TryOCRScant   string // lingua OCR
+	ScantKeep     string // motivo
+	OCRUsed       string
+	OCRNotBetter  string
+	EpubImages    Plural
+	EpubAuthor    string
+	EpubDate      string
+	EpubPublisher string
+	EpubLanguage  string
 
 	// --------------------------------------------------------- init
 	InitMissingDep    string // dipendenza
@@ -108,8 +117,10 @@ type Dict struct {
 	CannotWrite          string // cartella, errore
 
 	// ------------------------------------------------------- errori
-	ErrNoText, ErrExists, ErrOCRUnavailable   string
+	ErrNoText, ErrScantText, ErrExists        string
+	ErrOCRUnavailable                         string
 	ErrRawUnreachable, ErrDuplicate, ErrEmpty string
+	ErrEpubDRM, ErrEpubInvalid                string
 	UnknownStep                               string // tipo del passo
 	BackupCopy                                string // errore
 	OCRMissingBin                             string // errore, comando
@@ -179,6 +190,15 @@ var IT = Dict{
 	DuplicateOf:   "%w: stesso contenuto di %s (id %s)",
 	RawImmutable:  "%s esiste già: raw/ è immutabile, non sovrascrivo",
 	TryOCR:        "nessun testo nel PDF: provo l'OCR (%s)…",
+	TryOCRScant:   "poco testo nel PDF (scansione?): provo l'OCR (%s)…",
+	ScantKeep:     "tengo il poco testo del PDF: %v",
+	OCRUsed:       "l'OCR ha letto più testo: uso quello",
+	OCRNotBetter:  "l'OCR non ha letto più testo: tengo quello del PDF",
+	EpubImages:    Plural{"immagine del libro in raw/assets/", "immagini del libro in raw/assets/"},
+	EpubAuthor:    "Autore",
+	EpubDate:      "Data",
+	EpubPublisher: "Editore",
+	EpubLanguage:  "Lingua",
 
 	InitMissingDep:    "manca %s, che serve a init: installalo e rilancia (non ho creato nulla)",
 	Created:           "creato:",
@@ -251,11 +271,14 @@ var IT = Dict{
 	CannotWrite:          "non posso scrivere in %s: %w",
 
 	ErrNoText:           "nessun testo estratto dal PDF",
+	ErrScantText:        "poco testo nel PDF",
 	ErrExists:           "esiste già",
 	ErrOCRUnavailable:   "OCR non disponibile",
 	ErrRawUnreachable:   "raw remoto non raggiungibile",
 	ErrDuplicate:        "fonte già acquisita",
 	ErrEmpty:            "nessun testo nella fonte",
+	ErrEpubDRM:          "EPUB protetto da DRM: i capitoli sono cifrati, il testo non si legge",
+	ErrEpubInvalid:      "EPUB non valido",
 	UnknownStep:         "passo sconosciuto %T",
 	BackupCopy:          "copia di sicurezza: %w",
 	OCRMissingBin:       "%w: manca %s (servono poppler e tesseract)",
@@ -336,6 +359,15 @@ var EN = Dict{
 	DuplicateOf:   "%w: same content as %s (id %s)",
 	RawImmutable:  "%s already exists: raw/ is immutable, not overwriting",
 	TryOCR:        "no text in the PDF: trying OCR (%s)…",
+	TryOCRScant:   "little text in the PDF (a scan?): trying OCR (%s)…",
+	ScantKeep:     "keeping the PDF's scant text: %v",
+	OCRUsed:       "OCR read more text: using it",
+	OCRNotBetter:  "OCR didn't read more text: keeping the PDF's",
+	EpubImages:    Plural{"image of the book in raw/assets/", "images of the book in raw/assets/"},
+	EpubAuthor:    "Author",
+	EpubDate:      "Date",
+	EpubPublisher: "Publisher",
+	EpubLanguage:  "Language",
 
 	InitMissingDep:    "%s is missing and init needs it: install it and run again (nothing was created)",
 	Created:           "created:",
@@ -408,11 +440,14 @@ var EN = Dict{
 	CannotWrite:          "can't write to %s: %w",
 
 	ErrNoText:           "no text extracted from the PDF",
+	ErrScantText:        "little text in the PDF",
 	ErrExists:           "already exists",
 	ErrOCRUnavailable:   "OCR not available",
 	ErrRawUnreachable:   "remote raw unreachable",
 	ErrDuplicate:        "source already ingested",
 	ErrEmpty:            "no text in the source",
+	ErrEpubDRM:          "DRM-protected EPUB: the chapters are encrypted, the text can't be read",
+	ErrEpubInvalid:      "invalid EPUB",
 	UnknownStep:         "unknown step %T",
 	BackupCopy:          "backup copy: %w",
 	OCRMissingBin:       "%w: %s is missing (poppler and tesseract are needed)",

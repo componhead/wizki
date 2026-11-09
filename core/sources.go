@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -22,6 +23,7 @@ const (
 	KindDoc   Kind = "doc"   // markdown, testo, HTML: il testo è il contenuto stesso
 	KindImage Kind = "image" // immagine: link + OCR facoltativo
 	KindData  Kind = "data"  // CSV, TSV, JSON: il testo è il contenuto stesso
+	KindEpub  Kind = "epub"  // EPUB: capitoli in markdown, immagini in raw/assets/<stem>/
 )
 
 var kindByExt = map[string]Kind{
@@ -30,10 +32,11 @@ var kindByExt = map[string]Kind{
 	".png": KindImage, ".jpg": KindImage, ".jpeg": KindImage, ".webp": KindImage,
 	".gif": KindImage, ".tif": KindImage, ".tiff": KindImage,
 	".csv": KindData, ".tsv": KindData, ".json": KindData,
+	".epub": KindEpub,
 }
 
 // rawDirOf: la cartella sotto raw/ dove finisce l'originale di ogni tipo.
-var rawDirOf = map[Kind]string{KindPDF: "pdf", KindDoc: "doc", KindImage: "assets", KindData: "data"}
+var rawDirOf = map[Kind]string{KindPDF: "pdf", KindDoc: "doc", KindImage: "assets", KindData: "data", KindEpub: "epub"}
 
 // SourceKind restituisce il tipo di fonte dal nome del file (estensione,
 // maiuscole comprese); ok è false per i tipi non supportati.
@@ -59,6 +62,7 @@ func RawDirs() []string {
 	return []string{
 		filepath.Join("raw", "pdf"), filepath.Join("raw", "doc"),
 		filepath.Join("raw", "assets"), filepath.Join("raw", "data"),
+		filepath.Join("raw", "epub"),
 	}
 }
 
@@ -136,6 +140,23 @@ func PlanSource(root string, in SourceInput) ([]Step, error) {
 			return nil, fmt.Errorf("%w: %s", ErrEmpty, base)
 		}
 		return append(steps, WriteFile{Path: out, Data: in.Content}), nil
+	case KindEpub:
+		book, err := ParseEpub(in.Content)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", err, base)
+		}
+		rewrite := map[string]string{}
+		if len(book.ImageOrder) > 0 {
+			assetDir := filepath.Join(root, "raw", "assets", stem)
+			steps = append(steps, Mkdir{assetDir})
+			used := map[string]bool{}
+			for _, img := range book.ImageOrder {
+				to := filepath.Join(assetDir, uniqueName(path.Base(img), used))
+				steps = append(steps, WriteFile{Path: to, Data: book.Images[img]})
+				rewrite[img] = rel(to)
+			}
+		}
+		return append(steps, WriteFile{Path: out, Data: []byte(EpubText(book, rewrite))}), nil
 	}
 
 	text := DocText(base, in.Content)

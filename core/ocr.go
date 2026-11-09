@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // OCR è il passo di ripiego per i PDF senza livello di testo: rasterizza le
@@ -67,4 +68,31 @@ func MissingLangs(available []string, lang string) []string {
 		_, ok := have[l]
 		return !ok
 	})
+}
+
+// MinPageLetters è la soglia sotto cui una pagina estratta da pdftotext conta
+// come "senza testo": un numero di pagina, un'intestazione o la filigrana
+// dello scanner ("Scanned with CamScanner") non arrivano a 40 lettere.
+const MinPageLetters = 40
+
+// Letters conta le lettere di un testo, in qualunque alfabeto: spazi, cifre e
+// punteggiatura non contano.
+func Letters(s string) int {
+	n := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			n++
+		}
+	}
+	return n
+}
+
+// ScantText dice se il testo di pdftotext (pagine separate da \f) è troppo
+// scarso per essere quello vero del documento: almeno metà delle pagine ha
+// meno di MinPageLetters lettere. È il caso delle scansioni con un livello di
+// testo minimo, e dei PDF misti con molte pagine scansionate.
+func ScantText(text string) bool {
+	pages := strings.Split(strings.TrimSuffix(text, "\f"), "\f")
+	poor := len(Filter(pages, func(p string) bool { return Letters(p) < MinPageLetters }))
+	return poor*2 >= len(pages)
 }

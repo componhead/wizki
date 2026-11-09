@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"os"
@@ -78,7 +79,7 @@ func TestExtractConFakePdftotext(t *testing.T) {
 	root := t.TempDir()
 	pdf := filepath.Join(t.TempDir(), "Circolare 2026.pdf")
 	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
-	fakeBin(t, "pdftotext", `printf 'testo estratto\n' > "$3"`)
+	fakeBin(t, "pdftotext", fakePdftotextPagina)
 
 	code, out, errb := do(t, "-root", root, "extract", pdf)
 	if code != 0 {
@@ -99,6 +100,10 @@ func TestExtractConFakePdftotext(t *testing.T) {
 		t.Error("l'originale dovrebbe essere stato spostato")
 	}
 }
+
+// fakePdftotextPagina: pdftotext finto che estrae una pagina di testo vero
+// (abbastanza lettere da non sembrare una scansione: niente OCR).
+const fakePdftotextPagina = `printf 'Circolare sugli orari delle lezioni: dal primo ottobre le lezioni iniziano alle otto.\n\f' > "$3"`
 
 // scanFixture: pdf finto + pdftotext che non estrae nulla.
 func scanFixture(t *testing.T) (root, pdf string) {
@@ -195,6 +200,101 @@ func TestExtractOCRErroreDiPdftoppmFaRollback(t *testing.T) {
 	assertScanIntatta(t, root, pdf)
 }
 
+// scantFixture: pdf finto + pdftotext che estrae solo i numeri di pagina,
+// come una scansione con un livello di testo minimo.
+func scantFixture(t *testing.T) (root, pdf string) {
+	t.Helper()
+	root = t.TempDir()
+	pdf = filepath.Join(t.TempDir(), "scan.pdf")
+	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
+	fakeBin(t, "pdftotext", `printf '1\f2\f10\f' > "$3"`)
+	return
+}
+
+// TestExtractTestoScarsoUsaOCR: poco testo nel PDF -> OCR, e il testo
+// dell'OCR (più lettere) sostituisce quello di pdftotext.
+func TestExtractTestoScarsoUsaOCR(t *testing.T) {
+	root, pdf := scantFixture(t)
+	fakeBin(t, "pdftoppm", fakePdftoppm)
+	fakeBin(t, "tesseract", fakeTesseract)
+	code, out, errb := do(t, "-root", root, "extract", pdf)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	if !strings.Contains(errb, "poco testo") || !strings.Contains(errb, "uso quello") {
+		t.Errorf("stderr = %q", errb)
+	}
+	path, _ := extractOut(t, out)
+	b, _ := os.ReadFile(path)
+	if want := "testo di p-1 lingua ita\n\ntesto di p-2 lingua ita\n\ntesto di p-10 lingua ita\n"; string(b) != want {
+		t.Errorf("testo = %q, want %q", b, want)
+	}
+	assertNessunTemporaneo(t, filepath.Dir(path))
+}
+
+// TestExtractTestoScarsoOCRPeggiore: se l'OCR legge meno lettere, resta il
+// testo di pdftotext.
+func TestExtractTestoScarsoOCRPeggiore(t *testing.T) {
+	root, pdf := scantFixture(t)
+	fakeBin(t, "pdftotext", `printf 'Pagina uno\f' > "$3"`)
+	fakeBin(t, "pdftoppm", fakePdftoppm)
+	fakeBin(t, "tesseract", `if [ "$1" = "--list-langs" ]; then printf 'List of available languages (1):\nita\n'; exit 0; fi
+printf 'x\n'`)
+	code, out, errb := do(t, "-root", root, "extract", pdf)
+	if code != 0 || !strings.Contains(errb, "tengo quello del PDF") {
+		t.Fatalf("code=%d err=%q", code, errb)
+	}
+	path, _ := extractOut(t, out)
+	if b, _ := os.ReadFile(path); string(b) != "Pagina uno\f" {
+		t.Errorf("testo = %q", b)
+	}
+	assertNessunTemporaneo(t, filepath.Dir(path))
+}
+
+// TestExtractTestoScarsoSenzaOCR: OCR non disponibile o fallito -> niente
+// errore, resta il testo di pdftotext e lo dice su stderr.
+func TestExtractTestoScarsoSenzaOCR(t *testing.T) {
+	cases := []struct{ name, args, pdftoppm string }{
+		{"lingua mancante", "ita+deu", fakePdftoppm},
+		{"pdftoppm fallisce", "ita", `echo boom >&2; exit 1`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root, pdf := scantFixture(t)
+			fakeBin(t, "pdftoppm", c.pdftoppm)
+			fakeBin(t, "tesseract", fakeTesseract)
+			code, out, errb := do(t, "-root", root, "-ocr-lang", c.args, "extract", pdf)
+			if code != 0 || !strings.Contains(errb, "tengo il poco testo") {
+				t.Fatalf("code=%d err=%q", code, errb)
+			}
+			path, _ := extractOut(t, out)
+			if b, _ := os.ReadFile(path); string(b) != "1\f2\f10\f" {
+				t.Errorf("testo = %q", b)
+			}
+			assertNessunTemporaneo(t, filepath.Dir(path))
+		})
+	}
+}
+
+// TestExtractTestoScarsoNoOCR: con -no-ocr il testo scarso si tiene senza
+// tentare l'OCR.
+func TestExtractTestoScarsoNoOCR(t *testing.T) {
+	root, pdf := scantFixture(t)
+	fakeBin(t, "pdftoppm", `echo non dovevo essere chiamato >&2; exit 1`)
+	code, _, errb := do(t, "-root", root, "-no-ocr", "extract", pdf)
+	if code != 0 || errb != "" {
+		t.Errorf("code=%d err=%q", code, errb)
+	}
+}
+
+// assertNessunTemporaneo: l'OCR di ripiego non lascia file temporanei in raw/text.
+func assertNessunTemporaneo(t *testing.T, dir string) {
+	t.Helper()
+	if tmp, _ := filepath.Glob(filepath.Join(dir, ".ocr-*")); len(tmp) > 0 {
+		t.Errorf("file temporanei rimasti: %v", tmp)
+	}
+}
+
 func TestExtractNonSovrascrive(t *testing.T) {
 	root := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(root, "raw", "pdf"), 0o755)
@@ -243,7 +343,7 @@ func TestExtractContenutoDiversoNonEDuplicato(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(root, "raw", "pdf", "altro.pdf"), []byte("%PDF-altro"), 0o644)
 	pdf := filepath.Join(t.TempDir(), "nuovo.pdf")
 	_ = os.WriteFile(pdf, []byte("%PDF-finto"), 0o644)
-	fakeBin(t, "pdftotext", `printf 'x' > "$3"`)
+	fakeBin(t, "pdftotext", fakePdftotextPagina)
 	if code, _, errb := do(t, "-root", root, "extract", pdf); code != 0 {
 		t.Errorf("code=%d err=%q", code, errb)
 	}
@@ -301,7 +401,7 @@ func TestInitCreaLaWiki(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	for _, p := range []string{".", "inbox", "raw", "raw/pdf", "raw/doc", "raw/assets", "raw/data", "raw/text", "sources", "topics", "entities", "analyses", ".zk", ".zk/templates", ".git"} {
+	for _, p := range []string{".", "inbox", "raw", "raw/pdf", "raw/doc", "raw/assets", "raw/data", "raw/epub", "raw/text", "sources", "topics", "entities", "analyses", ".zk", ".zk/templates", ".git"} {
 		if fi, err := os.Stat(filepath.Join("mia", p)); err != nil || !fi.IsDir() {
 			t.Errorf("manca la cartella %s", p)
 		}
@@ -881,5 +981,90 @@ func TestZkDirsCompleti(t *testing.T) {
 		if lang := core.ConfigLanguage(string(files[filepath.Join(".zk", "config.toml")])); lang != code {
 			t.Errorf("%s: language = %q nella config", code, lang)
 		}
+	}
+}
+
+// writeEpub scrive in dir/name un EPUB minimo: un capitolo con un'immagine e,
+// se drm, il capitolo segnato come cifrato in encryption.xml.
+func writeEpub(t *testing.T, dir, name string, drm bool) string {
+	t.Helper()
+	files := map[string]string{
+		"mimetype":               "application/epub+zip",
+		"META-INF/container.xml": `<container><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>`,
+		"book.opf": `<package><metadata><title>Il libro</title><creator>Anna Verdi</creator><date>2021</date></metadata>
+<manifest><item id="c" href="c.xhtml"/><item id="i" href="cover.jpg"/></manifest><spine><itemref idref="c"/></spine></package>`,
+		"c.xhtml":   `<html><body><h1>Inizio</h1><p>Il primo capitolo.</p><img src="cover.jpg" alt="Copertina"/></body></html>`,
+		"cover.jpg": "JPG",
+	}
+	if drm {
+		files["META-INF/encryption.xml"] = `<encryption><EncryptedData><CipherData><CipherReference URI="c.xhtml"/></CipherData></EncryptedData></encryption>`
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for n, body := range files {
+		w, _ := zw.Create(n)
+		_, _ = w.Write([]byte(body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// TestExtractEpub: originale in raw/epub/, copertina in raw/assets/<stem>/,
+// testo con metadati e capitolo; la inbox lo elenca prima di acquisirlo.
+func TestExtractEpub(t *testing.T) {
+	root := t.TempDir()
+	inboxDir := filepath.Join(root, "inbox")
+	_ = os.MkdirAll(inboxDir, 0o755)
+	src := writeEpub(t, inboxDir, "Il Libro.epub", false)
+
+	if code, out, errb := do(t, "-root", root, "inbox"); code != 0 || out != "Il Libro.epub\n" {
+		t.Errorf("inbox: code=%d out=%q err=%q", code, out, errb)
+	}
+	code, out, errb := do(t, "-root", root, "extract", src)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	if !strings.Contains(errb, "1 immagine del libro") {
+		t.Errorf("stderr = %q", errb)
+	}
+	path, _ := extractOut(t, out)
+	if want := filepath.Join(root, "raw", "text", "il-libro-epub.md"); path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+	b, _ := os.ReadFile(path)
+	want := "# Il libro\n\n- Autore: Anna Verdi\n- Data: 2021\n\n# Inizio\n\nIl primo capitolo.\n\n![Copertina](raw/assets/il-libro/cover.jpg)\n"
+	if string(b) != want {
+		t.Errorf("testo = %q, want %q", b, want)
+	}
+	if img, _ := os.ReadFile(filepath.Join(root, "raw", "assets", "il-libro", "cover.jpg")); string(img) != "JPG" {
+		t.Error("copertina non in raw/assets/il-libro/")
+	}
+	if _, err := os.Stat(filepath.Join(root, "raw", "epub", "il-libro.epub")); err != nil {
+		t.Error("EPUB non in raw/epub")
+	}
+	if _, err := os.Stat(src); err == nil {
+		t.Error("l'EPUB doveva lasciare la inbox")
+	}
+}
+
+// TestExtractEpubDRM: exit 3, l'EPUB resta in inbox e raw/ non cambia.
+func TestExtractEpubDRM(t *testing.T) {
+	root := t.TempDir()
+	src := writeEpub(t, t.TempDir(), "protetto.epub", true)
+	code, _, errb := do(t, "-root", root, "extract", src)
+	if code != 3 || !strings.Contains(errb, "DRM") {
+		t.Errorf("code=%d err=%q", code, errb)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Error("l'EPUB doveva restare dov'era")
+	}
+	if _, err := os.Stat(filepath.Join(root, "raw")); err == nil {
+		t.Error("raw/ non doveva essere creata")
 	}
 }

@@ -3,9 +3,9 @@
 //	wizki [-root library] [-ocr-lang ita] [-no-ocr] extract <file>
 //	                                              acquisisce una fonte: PDF (OCR se scansione), .md/.txt/.html
 //	                                              (con le immagini locali), immagini (OCR facoltativo),
-//	                                              .csv/.tsv/.json; originale in raw/<tipo>, testo in raw/text;
+//	                                              .csv/.tsv/.json, .epub (capitoli e immagini); originale in raw/<tipo>, testo in raw/text;
 //	                                              stampa il path del testo e, sulla riga dopo, l'id (SHA-256, 8 hex)
-//	exit: 0 ok, 1 errore, 2 uso, 3 nessun testo (anche con OCR), 4 OCR non disponibile,
+//	exit: 0 ok, 1 errore, 2 uso, 3 nessun testo (anche con OCR, o EPUB con DRM), 4 OCR non disponibile,
 //	      5 fonte già acquisita (stesso contenuto di un originale in raw/, anche con nome diverso)
 //	      6 raw/ in rete non raggiungibile (condivisione non montata: manca il marcatore .wizki-raw)
 //	wizki [-root library] inbox                    elenca le fonti acquisibili, nell'ordine in cui acquisirle
@@ -148,7 +148,7 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 	}
 	if err != nil {
 		fmt.Fprintln(errw, i18n.T().ErrorPrefix, err)
-		if errors.Is(err, fx.ErrNoText) || errors.Is(err, core.ErrEmpty) {
+		if errors.Is(err, fx.ErrNoText) || errors.Is(err, core.ErrEmpty) || errors.Is(err, core.ErrEpubDRM) {
 			return 3
 		}
 		if errors.Is(err, fx.ErrOCRUnavailable) {
@@ -239,7 +239,7 @@ func extract(ctx context.Context, root, src, lang string, noOCR bool, out, errw 
 	in := core.SourceInput{Path: src}
 	kind, _ := core.SourceKind(src)
 	switch kind {
-	case core.KindDoc, core.KindData:
+	case core.KindDoc, core.KindData, core.KindEpub:
 		b, err := os.ReadFile(src)
 		if err != nil {
 			return err
@@ -271,6 +271,12 @@ func extract(ctx context.Context, root, src, lang string, noOCR bool, out, errw 
 	steps, err := core.PlanSource(root, in)
 	if err != nil {
 		return err
+	}
+	if kind == core.KindEpub {
+		// tutti i WriteFile tranne l'ultimo (il testo) sono immagini del libro
+		if n := countWrites(steps) - 1; n > 0 {
+			fmt.Fprintln(errw, d.EpubImages.Count(n))
+		}
 	}
 	// controllo sul contenuto, prima di toccare raw/: il nome del file non conta
 	sum, err := fx.HashFile(src)
@@ -308,6 +314,14 @@ func extract(ctx context.Context, root, src, lang string, noOCR bool, out, errw 
 	}
 	for i, s := range steps {
 		err := fx.Exec(ctx, s)
+		if errors.Is(err, fx.ErrScantText) {
+			// testo quasi vuoto (scansione con poche parole): non è un errore,
+			// ma provo l'OCR e tengo il testo migliore
+			err = nil
+			if !noOCR {
+				improveScant(ctx, s.(core.Extract), lang, errw)
+			}
+		}
 		if errors.Is(err, fx.ErrNoText) && !noOCR {
 			// scansione: ripiego su OCR; se non è disponibile, annullo il move
 			if cerr := fx.CheckOCR(ctx, lang); cerr != nil {
@@ -782,4 +796,36 @@ func rawRemote(ctx context.Context, root string, args []string, out io.Writer) e
 		}
 	}
 	return nil
+}
+
+// improveScant: pdftotext ha trovato poco testo (vedi core.ScantText). Se
+// l'OCR è disponibile lo prova e tiene il testo con più lettere; altrimenti,
+// o se l'OCR fallisce, tiene quello di pdftotext e lo dice su errw.
+func improveScant(ctx context.Context, e core.Extract, lang string, errw io.Writer) {
+	d := i18n.T()
+	if err := fx.CheckOCR(ctx, lang); err != nil {
+		fmt.Fprintf(errw, d.ScantKeep+"\n", err)
+		return
+	}
+	fmt.Fprintf(errw, d.TryOCRScant+"\n", lang)
+	used, err := fx.ImproveWithOCR(ctx, core.FallbackOCR(e, lang))
+	switch {
+	case err != nil:
+		fmt.Fprintf(errw, d.ScantKeep+"\n", err)
+	case used:
+		fmt.Fprintln(errw, d.OCRUsed)
+	default:
+		fmt.Fprintln(errw, d.OCRNotBetter)
+	}
+}
+
+// countWrites conta i passi WriteFile di un piano.
+func countWrites(steps []core.Step) int {
+	n := 0
+	for _, s := range steps {
+		if _, ok := s.(core.WriteFile); ok {
+			n++
+		}
+	}
+	return n
 }

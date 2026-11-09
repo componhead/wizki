@@ -33,6 +33,7 @@ var WikiDirs = []string{
 	filepath.Join("raw", "doc"),
 	filepath.Join("raw", "assets"),
 	filepath.Join("raw", "data"),
+	filepath.Join("raw", "epub"),
 	filepath.Join("raw", "text"),
 	"sources",
 	"topics",

@@ -79,6 +79,7 @@ A wiki is just a folder on your computer. The main one in this project is called
     │   ├── doc/              web articles and text files (.md, .txt, .html)
     │   ├── assets/           pictures
     │   ├── data/             spreadsheets and data files (.csv, .tsv, .json)
+    │   ├── epub/             e-books (.epub)
     │   └── text/             the text pulled out of each original
     ├── sources/          ← one page per document: summary, subjects, people involved
     ├── topics/           ← one page per subject, growing with every document
@@ -365,6 +366,18 @@ so wizki notices and reads it with **OCR** (character recognition):
 
 *(no text in the PDF: trying OCR (Italian)…)*
 
+The same happens when a scan carries only a scrap of text (page numbers, the
+scanner app's watermark): if at least half of the pages have fewer than 40
+letters, wizki tries OCR and keeps whichever text is longer:
+
+    poco testo nel PDF (scansione?): provo l'OCR (ita)…
+    l'OCR ha letto più testo: uso quello
+
+*(little text in the PDF (a scan?): trying OCR (Italian)… OCR read more text: using it)*
+
+In this case, if OCR isn't available or fails, wizki keeps the little text it
+found, says so, and ingests the source anyway.
+
 OCR occasionally misreads a letter or two, so the assistant reads the result
 with a pinch of salt. If the Italian language pack for tesseract isn't
 installed, wizki stops and explains, and the letter stays in the inbox
@@ -435,6 +448,34 @@ assistant reads the numbers directly:
 
     library/raw/text/enrolment-2026-csv.md
     69f190a3
+
+### 6b. A book: an EPUB
+
+Giulia has the e-book of a history of Italian schools and drops
+`Storia della scuola.epub` in the inbox. An EPUB is a zip of web pages, so wizki
+opens it, reads the chapters in reading order and turns them into a single text:
+the book's title, author, date, publisher and language at the top, then one
+chapter after another, each under its title from the book's table of contents.
+The original goes to `raw/epub/`, the pictures used by the chapters to
+`raw/assets/storia-della-scuola/`:
+
+    1 immagine del libro in raw/assets/
+    library/raw/text/storia-della-scuola-epub.md
+    5c1d2e3f
+
+*(1 image of the book in raw/assets/)*
+
+Links between chapters and to footnotes become plain text, since they lead
+nowhere outside the book; web links stay. The date at the top often belongs to
+the digital edition, not to the work: the assistant checks it before using it.
+A book is long, so the assistant reads it chapter by chapter.
+
+E-books bought from shops are often locked with DRM: then the chapters are
+encrypted, wizki can't read them and stops, leaving the file in the inbox:
+
+    errore: EPUB protetto da DRM: i capitoli sono cifrati, il testo non si legge: libro.epub
+
+*(error: DRM-protected EPUB: the chapters are encrypted, the text can't be read)*
 
 ### 7. A full inbox
 
@@ -824,13 +865,14 @@ What `extract` accepts, and where each kind of file goes:
 
 | Kind | Extensions | Original goes to | Extracted text |
 |---|---|---|---|
-| PDF | `.pdf` | `raw/pdf/` | text via pdftotext; OCR if scanned |
+| PDF | `.pdf` | `raw/pdf/` | text via pdftotext; OCR if scanned (no text, or very little) |
 | Text | `.md` `.markdown` `.txt` `.html` `.htm` | `raw/doc/` (pictures in `raw/assets/<name>/`) | the content (HTML converted to Markdown) |
 | Picture | `.png` `.jpg` `.jpeg` `.webp` `.gif` `.tif` `.tiff` | `raw/assets/` | link to the picture + OCR text |
 | Data | `.csv` `.tsv` `.json` | `raw/data/` | the content |
+| E-book | `.epub` | `raw/epub/` (pictures in `raw/assets/<name>/`) | metadata, then the chapters in reading order (HTML converted to Markdown); DRM-protected books are refused |
 
 Exit codes (useful in scripts): 0 ok; 1 error, warnings from `lint`, or programs missing for `deps`; 2 wrong
-usage; 3 no text (even with OCR); 4 OCR not available; 5 source already added;
+usage; 3 no text (even with OCR, or a DRM-protected EPUB); 4 OCR not available; 5 source already added;
 6 network `raw/` unreachable.
 
 wizki is written in Go, with no dependencies beyond the standard library. It

@@ -19,6 +19,10 @@ import (
 // ErrNoText: il PDF non ha livello di testo (probabile scansione).
 var ErrNoText error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrNoText })
 
+// ErrScantText: il PDF ha un livello di testo, ma quasi vuoto (vedi
+// core.ScantText). Il testo di pdftotext è già scritto: non è un fallimento.
+var ErrScantText error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrScantText })
+
 // ErrExists: il file (o il repository git) da creare c'è già; non lo tocco.
 var ErrExists error = i18n.NewErr(func(d *i18n.Dict) string { return d.ErrExists })
 
@@ -42,6 +46,9 @@ func Exec(ctx context.Context, s core.Step) error {
 		}
 		if strings.TrimSpace(string(b)) == "" {
 			return ErrNoText
+		}
+		if core.ScantText(string(b)) {
+			return ErrScantText
 		}
 		return nil
 	case core.OCR:
