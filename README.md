@@ -159,23 +159,29 @@ between sources, related subjects ("Vedi anche", see also) and saved analyses.
 
 In this guide, a command looks like this:
 
-    ./bin/wizki inbox
+    wizki inbox
 
 Type it in the terminal exactly as written (or copy and paste it) and press
 Enter. The lines shown below a command are what it prints back. Always type
 commands from inside the project folder; to get there, type `cd` followed by the
 folder's location, for example `cd ~/Documents/wizki`.
 
-### Build wizki, once
+### Install wizki, once
 
-    go build -o bin/wizki .
+From the wizki folder:
 
-This turns the source code into a program, `bin/wizki`. You only do this once,
-and again if you download a newer version of the project.
+    go install .
+
+This turns the source code into a program, `wizki`, and puts it in Go's
+program folder (`~/go/bin`, or whatever `go env GOPATH` says, followed by
+`/bin`). That folder must be in your `PATH`, the list of places where the
+terminal looks for programs: if typing `wizki deps` says "command not found",
+add it (in Fish: `fish_add_path ~/go/bin`). You only do this once, and again
+whenever you download a newer version of wizki.
 
 ### Check what's missing
 
-    ./bin/wizki deps
+    wizki deps
 
 wizki lists every program it uses, with ✓ for those it found and ✗ for those
 missing. On a computer that lacks only the Italian language for tesseract, it
@@ -213,7 +219,7 @@ aren't available in every package manager. zk, for example, isn't in apt or
 dnf, and in that case wizki tells you where to find it.
 
 If your wiki reads documents in other languages too, include them:
-`./bin/wizki -ocr-lang ita+eng deps` also checks English.
+`wizki -ocr-lang ita+eng deps` also checks English.
 
 ### A word about language
 
@@ -250,7 +256,7 @@ does.
 | Command | In plain words | When |
 |---|---|---|
 | `wizki deps` | Check that the programs wizki needs are installed, and offer to install what's missing | Right after building wizki, or when something doesn't work |
-| `wizki init <name> [--locale it\|en]` | Create a new, empty wiki in Italian or English (checking the programs first) | Starting a new subject area |
+| `wizki init <name> [--locale it\|en]` | Create a new project with an empty wiki in `library/`, in Italian or English (checking the programs first) | Starting a new subject area |
 | `wizki inbox` | List what's waiting in the inbox, in the right order | Before adding documents |
 | `wizki extract <file>` | Put a document in the safe and pull its text out | First step of every addition |
 | `wizki index` | Rebuild the catalog of all pages | After pages change |
@@ -261,8 +267,8 @@ does.
 | `wizki raw <folder>` / `raw <folder> -apply` | Move the safe (`raw/`) to a network drive: first show the plan, then do it | When originals take too much space, or should be shared |
 | `wizki slug <text>` | Turn a title into a safe file name | Rarely; mostly used internally |
 
-In the terminal, write `./bin/wizki` instead of just `wizki` (it means "the
-wizki program in the `bin` folder").
+Type the commands from the project folder (the one holding `CLAUDE.md`): wizki
+then finds the wiki in `library/` on its own.
 
 ---
 
@@ -279,8 +285,8 @@ to create anything: she opens the terminal in the project folder, builds wizki
 and checks that everything it needs is installed:
 
     cd ~/Documents/wizki
-    go build -o bin/wizki .
-    ./bin/wizki deps
+    go install .
+    wizki deps
 
 The Italian language for tesseract is missing, so wizki offers the command to
 install it. Giulia answers `s`, types her password, and the second list comes
@@ -304,7 +310,7 @@ Here is what happens, step by step:
 
 1. **The assistant files the original and reads it.** It runs:
 
-       ./bin/wizki extract "library/inbox/Circolare 12-2026.pdf"
+       wizki extract "library/inbox/Circolare 12-2026.pdf"
 
    which prints two lines:
 
@@ -341,8 +347,8 @@ Here is what happens, step by step:
 
 5. **It updates the catalog and the diary:**
 
-       ./bin/wizki index
-       ./bin/wizki log ingest "Circolare 12/2026 - nuovo orario"
+       wizki index
+       wizki log ingest "Circolare 12/2026 - nuovo orario"
 
    The diary, `log.md`, now ends with:
 
@@ -388,7 +394,7 @@ untouched:
 *(error: OCR not available: Tesseract's ita language pack is missing)*
 
 For a document in another language, the language can be chosen:
-`./bin/wizki -ocr-lang eng extract ...` for English, or `-ocr-lang ita+eng` for a
+`wizki -ocr-lang eng extract ...` for English, or `-ocr-lang ita+eng` for a
 mix of both.
 
 ### 4. A web article with pictures
@@ -482,7 +488,7 @@ encrypted, wizki can't read them and stops, leaving the file in the inbox:
 After a busy week the inbox holds six files. Before starting, Giulia asks wizki
 what's there:
 
-    ./bin/wizki inbox
+    wizki inbox
 
     Enrolment 2026.csv
     Timetable article.md
@@ -526,7 +532,7 @@ reviewing the analysis.
 Once a month Giulia types `/lint` in Claude Code. The assistant first runs the
 automatic checks:
 
-    ./bin/wizki lint
+    wizki lint
 
     [info] orario: una sola fonte
     [warn] sources/47311eb0-new-timetable-for-2026.md: published: mancante (data del documento, o sconosciuta)
@@ -581,86 +587,121 @@ anything found online enters the wiki only as a new document in the inbox, never
 straight into the pages. The questions Giulia approves go into the "open
 questions" section of `overview.md`. Finally the check-up goes in the diary:
 
-    ./bin/wizki log lint "2026-12-01"
+    wizki log lint "2026-12-01"
 
 ### 10. A second wiki for a different part of life
 
 Giulia is planning a family trip to Japan and wants to keep it separate from the
-school wiki. She creates a new one:
+school wiki. She creates a new project, next to the wizki folder:
 
-    ./bin/wizki init viaggio-giappone
+    cd ~/Documents
+    wizki init viaggio-giappone
 
     Dipendenze:
       ✓ git            storia della wiki (serve a init)
       ...
       ✓ zk             note, tag e link (serve a lint)
-    creato: viaggio-giappone/inbox/.gitkeep
-    creato: viaggio-giappone/raw/pdf/.gitkeep
+    creato: viaggio-giappone/.claude/commands/ingest.md
+    creato: viaggio-giappone/.claude/commands/lint.md
+    creato: viaggio-giappone/CLAUDE.md
+    creato: viaggio-giappone/README.md
+    creato: viaggio-giappone/library/.gitkeep
+    creato: viaggio-giappone/library/inbox/.gitkeep
     ...
-    creato: viaggio-giappone/overview.md
-    creato: viaggio-giappone/index.md
+    creato: viaggio-giappone/library/log.md
+    creato: viaggio-giappone/library/overview.md
+    creato: viaggio-giappone/library/index.md
+    creato: viaggio-giappone/library/.gitignore
     creato: viaggio-giappone/.git
-    wiki "viaggio-giappone" pronta: usa wizki -root viaggio-giappone (o WIKI_ROOT=viaggio-giappone)
+    progetto "viaggio-giappone" pronto, con la wiki in library/: entra con cd viaggio-giappone e apri claude
 
-*(Dependencies: …; created: …; wiki "viaggio-giappone" ready: use wizki -root viaggio-giappone, or WIKI_ROOT=viaggio-giappone)*
+*(Dependencies: …; created: …; project "viaggio-giappone" ready, with the wiki in library/: cd viaggio-giappone and open claude)*
 
 Like `deps`, `init` first checks the programs and offers to install what's
 missing. Since her guide-book PDFs are partly in English, Giulia could run
-`./bin/wizki -ocr-lang ita+eng init viaggio-giappone` to check the English OCR
+`wizki -ocr-lang ita+eng init viaggio-giappone` to check the English OCR
 language too. If **git** is missing, `init` stops before creating anything: it
 needs git to give the wiki its history.
 
-The new folder has the same layout as `library/`, its own settings, and its own
-history (it is a separate git repository). Running `init` again never overwrites
-anything: it only fills in what's missing, and says `già presente` (*already
-there*) for the rest.
+The new folder is a complete project, just like this one:
 
-A wiki can also be in English: `./bin/wizki init japan-trip --locale en` creates
-the same layout with English templates (`## Summary`, `## See also`, `type:` for
-entities…), an English overview and catalog, and wizki then talks English
-whenever it works on it. Running `init` again on an existing wiki keeps its
-language; asking for a different one with `--locale` is refused.
+    viaggio-giappone/
+    ├── README.md         ← how to use the wiki, in the wiki's language
+    ├── CLAUDE.md         ← the rule book, a copy of this project's
+    ├── .claude/commands/ ← /ingest and /lint
+    ├── .git/             ← its own history
+    └── library/          ← the wiki: inbox/, raw/, sources/, topics/, …
 
-To work on this wiki instead of `library/`, every command gets `-root`:
+So she works on it exactly as on the school wiki, from its own folder:
 
-    ./bin/wizki -root viaggio-giappone inbox
-    ./bin/wizki -root viaggio-giappone lint
+    cd viaggio-giappone
+    claude
 
-To avoid typing it every time, the choice can be set once for the whole terminal
-session, with `export WIKI_ROOT=viaggio-giappone` (or `set -x WIKI_ROOT
-viaggio-giappone` in the Fish shell).
+`/ingest`, `/lint`, questions and every `wizki` command work there with no
+extra options: wizki finds the wiki in `library/` on its own. The rule book is
+the project's own copy, so it can evolve differently from the school one.
 
-Without `-root` and `WIKI_ROOT`, wizki uses the current folder if it is a wiki
-(it contains `.zk/config.toml`), otherwise `library/`. So, from inside the wiki
-folder, plain `wizki lint` is enough.
+From another folder, `-root` points wizki to the project:
+`wizki -root ~/Documents/viaggio-giappone lint`.
+
+Running `init` again never overwrites anything: it only fills in what's
+missing, and says `già presente` (*already there*) for the rest.
+
+A wiki can also be in English: `wizki init japan-trip --locale en` creates the
+same layout with English templates (`## Summary`, `## See also`, `type:` for
+entities…), an English overview, catalog and `README.md`, and wizki then talks
+English whenever it works on it. Running `init` again on an existing wiki keeps
+its language; asking for a different one with `--locale` is refused.
 
 ### 11. After updating wizki
 
-Months later, Giulia downloads a newer version of this project, which has new
-features such as analyses. Her `viaggio-giappone` wiki was created with the old
-version, so it lacks some folders and settings. She asks wizki what's missing:
+Months later, Giulia downloads a newer version of wizki, which has new
+features such as analyses, and installs it again with `go install .`. Her
+`viaggio-giappone` project was created with the old version, so it lacks some
+folders and settings. From the project folder, she asks wizki what's missing:
 
-    ./bin/wizki -root viaggio-giappone upgrade
+    cd ~/Documents/viaggio-giappone
+    wizki upgrade
 
     prova: nessuna modifica. Rilancia con -apply per applicare:
-    crea: viaggio-giappone/analyses/
-    crea: viaggio-giappone/analyses/.gitkeep
-    aggiorna: viaggio-giappone/.zk/config.toml (copia del vecchio in viaggio-giappone/.zk/config.toml.bak)
-    crea: viaggio-giappone/.zk/templates/analysis.md
-    aggiorna: viaggio-giappone/.zk/templates/topic.md (copia del vecchio in viaggio-giappone/.zk/templates/topic.md.bak)
+    crea: library/analyses/
+    crea: library/analyses/.gitkeep
+    aggiorna: library/.zk/config.toml (copia del vecchio in library/.zk/config.toml.bak)
+    crea: library/.zk/templates/analysis.md
+    aggiorna: CLAUDE.md (copia del vecchio in CLAUDE.md.bak)
 
 *(trial run: no changes. Run again with -apply to apply. create: … / update: … (old copy saved in ….bak))*
 
 This first run is only a **trial**: nothing changes. When she's happy with the
 list, she applies it:
 
-    ./bin/wizki -root viaggio-giappone upgrade -apply
+    wizki upgrade -apply
 
-wizki creates what's missing, replaces the outdated settings files (keeping each
-old one as a `.bak` copy, in case she had customized something), and rebuilds
-the catalog. **Her pages are never touched.** Running `upgrade` again now says
+wizki creates what's missing, replaces the outdated settings files, the
+project's `README.md`, `CLAUDE.md` and slash commands (keeping each old one as
+a `.bak` copy, in case she had customized something: if she had refined her
+rule book, she carries those changes over by hand), and rebuilds the catalog.
+**Her pages are never touched.** Running `upgrade` again now says
 `… è già aggiornata` (*… is already up to date*). Older pages may lack newer
 fields, such as the publication date; the next check-up will point them out.
+
+**Wikis from before projects.** Older versions of `init` created the wiki
+directly in `viaggio-giappone/`, without `library/`, `CLAUDE.md` or slash
+commands. `upgrade` recognizes them (the wiki and its git history are in the
+same folder) and moves the wiki into `library/`:
+
+    wizki -root viaggio-giappone upgrade
+
+    prova: nessuna modifica. Rilancia con -apply per applicare:
+    crea: viaggio-giappone/library/
+    sposta: viaggio-giappone/.zk -> viaggio-giappone/library/.zk
+    sposta: viaggio-giappone/inbox -> viaggio-giappone/library/inbox
+    ...
+    crea: viaggio-giappone/CLAUDE.md
+
+The history stays where it was, so git sees the moves as renames. After
+`-apply`, `viaggio-giappone/` is a project like any other. A network `raw`
+moves along with the wiki and keeps working.
 
 ### 12. Keeping the originals on the family NAS
 
@@ -674,7 +715,7 @@ mounted with sshfs, a cloud drive mounted with rclone.)
 She asks wizki to move the safe, `raw/`, there. As always, the first run is
 only a trial:
 
-    ./bin/wizki raw /mnt/nas/wiki
+    wizki raw /mnt/nas/wiki
 
     prova: nessuna modifica. Rilancia con -apply per applicare:
     copia con verifica: 412 file in /mnt/nas/wiki
@@ -688,7 +729,7 @@ library/raw → /mnt/nas/wiki; create: /mnt/nas/wiki/.wizki-raw)*
 
 Then she runs it for real:
 
-    ./bin/wizki raw /mnt/nas/wiki -apply
+    wizki raw /mnt/nas/wiki -apply
 
 Here is what wizki does:
 
@@ -735,7 +776,7 @@ A few commands mostly run behind the scenes, but can be useful by hand.
 
 **Rebuild the catalog** after editing pages yourself:
 
-    ./bin/wizki index
+    wizki index
 
     library/index.md
 
@@ -755,7 +796,7 @@ Never edit `index.md` by hand: the next rebuild would undo your changes.
 **Write in the diary** by hand, for example after a session you handled
 yourself. The first word must be `ingest`, `query` or `lint`:
 
-    ./bin/wizki log query "Bus routes compared"
+    wizki log query "Bus routes compared"
 
     ## [2026-12-10] query | Bus routes compared
 
@@ -766,7 +807,7 @@ five entries:
 
 **See how a title becomes a file name**, lowercase, without accents or symbols:
 
-    ./bin/wizki slug "Circolare N° 12/2026: orari"
+    wizki slug "Circolare N° 12/2026: orari"
 
     circolare-n-12-2026-orari
 
@@ -855,8 +896,9 @@ Every command, with its options:
     wizki [-locale it|en] [-ocr-lang ita] deps
     wizki [-ocr-lang ita] init <name> [--locale it|en]
 
-- `-root`: which wiki to work on (default `library`); can also be set with the
-  `WIKI_ROOT` environment variable.
+- `-root`: which wiki to work on; can also be set with the `WIKI_ROOT`
+  environment variable. Without either: the current folder if it is a wiki,
+  otherwise `library`. If it points to a project, its `library/` is used.
 - `-ocr-lang`: OCR language(s), e.g. `ita`, `eng`, `ita+eng` (default `ita`);
   can also be set with `WIKI_OCR_LANG`.
 - `-no-ocr`: never try OCR.
@@ -884,7 +926,9 @@ calls `pdftotext`, `pdftoppm`, `tesseract`, `zk` and `git` when needed. The
 code is split into `core/` (pure logic, fully tested), `fx/` (everything that
 touches files and other programs) and `i18n/` (the dictionary: every text wizki
 prints or writes, one struct per language). The zk settings and templates for
-Italian are `library/.zk/`; for English, `locales/en/zk/`. Run the tests with `go test ./...`.
+Italian are `library/.zk/`; for English, `locales/en/zk/`. What `init` copies into
+every new project: `CLAUDE.md` and `.claude/commands/` of this repo, and the
+README from `locales/<language>/README.md`. Run the tests with `go test ./...`.
 
 ---
 

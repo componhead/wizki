@@ -11,11 +11,21 @@ the Italian version prevails (the slash commands cite its sections).
 
 Pattern "LLM Wiki": le fonti grezze sono immutabili, la wiki è markdown
 che mantieni tu, questo file è lo schema. Strumenti: `zk` (note, tag, link)
-e `wizki` (binario Go di questo repo: estrazione delle fonti, indice, log, lint).
+e `wizki` (binario Go: estrazione delle fonti, indice, log, lint).
 
-    go build -o bin/wizki .        # una volta; poi ./bin/wizki ...
+    go install .        # dal repo di wizki, una volta e dopo ogni aggiornamento
+
+`go install` mette `wizki` in `$(go env GOPATH)/bin`, che deve stare nel `PATH`.
+Tutti i comandi si lanciano dalla radice del progetto, la cartella che contiene
+questo file.
 
 ### Struttura
+
+    <progetto>/
+    ├── CLAUDE.md         questo schema
+    ├── README.md         guida all'uso
+    ├── .claude/commands/ /ingest e /lint
+    └── library/          la wiki
 
     library/
     ├── inbox/            fonti da elaborare (PDF, .md, .txt, .html, immagini, .csv/.tsv/.json)
@@ -36,16 +46,21 @@ Ogni pagina (fonte, topic, entità, analisi, panoramica) ha nel frontmatter `sum
 un riassunto di **una riga** che finisce nell'indice. Tienilo aggiornato quando
 la pagina cambia.
 
-Una nuova wiki si crea con `./bin/wizki init <nome>`. Prima controlla le dipendenze
+Una nuova wiki si crea con `wizki init <nome>`. Prima controlla le dipendenze
 (git, poppler, tesseract con la lingua OCR, zk) e, se manca qualcosa, propone il
 comando per installarlo con il gestore di pacchetti (pacman, apt, dnf, brew),
 chiedendo conferma prima di lanciarlo; senza git si ferma. Lo stesso controllo si
-fa in ogni momento con `./bin/wizki deps`. Poi crea `./<nome>/` con questa
-struttura (un `.gitkeep` per cartella, `overview.md` vuota, `index.md` iniziale), `.zk/` (config e template della lingua scelta), `.gitignore`
-e un repository git (`git init -b master`). Non sovrascrive nulla: rilanciarlo
-completa solo ciò che manca. Poi usala con `-root <nome>` (o `WIKI_ROOT`); senza nessuno dei due, wizki usa la cartella corrente se è una wiki, altrimenti `library/`.
+fa in ogni momento con `wizki deps`. Poi crea il progetto `./<nome>/`, con
+`README.md`, questo `CLAUDE.md`, `.claude/commands/` e un repository git
+(`git init -b master`), e dentro la wiki `./<nome>/library/` con questa
+struttura (un `.gitkeep` per cartella, `overview.md` vuota, `index.md` iniziale),
+`.zk/` (config e template della lingua scelta) e `.gitignore`. Non sovrascrive
+nulla: rilanciarlo completa solo ciò che manca. Poi si lavora dal progetto:
+`cd <nome>` e `claude`. wizki trova la wiki da solo: `-root` (o `WIKI_ROOT`) se
+c'è, altrimenti la cartella corrente se è una wiki, altrimenti `library/`; se
+`-root` indica un progetto, usa la sua `library/`.
 
-La lingua si sceglie alla creazione: `./bin/wizki init <nome> --locale en` (default
+La lingua si sceglie alla creazione: `wizki init <nome> --locale en` (default
 `it`). Vale per tutto: config e template zk (in inglese da `locales/en/zk/`, in
 italiano da `library/.zk/`), `overview.md`, `index.md`, i valori fissi (`type:` con `zk new entities ... --extra type=<tipo>`,
 e `person`, `place`… per le entità, `published: unknown`), i messaggi di lint e
@@ -58,15 +73,20 @@ stanno nel dizionario `i18n/dict.go`. `-locale` (o `WIKI_LOCALE`) sceglie la lin
 dei comandi senza wiki (`deps`, `slug`).
 
 Per portare una wiki creata con una versione precedente al layout attuale:
-`./bin/wizki -root <nome> upgrade` mostra cosa farebbe, `upgrade -apply` lo fa.
-Crea ciò che manca, sostituisce i file di `.zk/` diversi da quelli incorporati
-(salvando il vecchio in `<file>.bak`) e rigenera `index.md`; non tocca le note.
-Dopo, confronta i `.bak` con i file nuovi (eventuali personalizzazioni vanno
-riportate a mano), cancellali e lancia `./bin/wizki -root <nome> lint`: le note
-vecchie possono non avere i campi nuovi (es. `summary:`, `published:`).
+`wizki upgrade` mostra cosa farebbe, `upgrade -apply` lo fa. Crea ciò che
+manca e sostituisce i file di `.zk/` e quelli del progetto (`README.md`,
+`CLAUDE.md`, `.claude/commands/`) diversi da quelli incorporati, salvando il
+vecchio in `<file>.bak`. Poi rigenera `index.md`. Non tocca le note. Una wiki
+con il layout precedente (wiki e repository git nella stessa cartella,
+creata da una versione vecchia di `init`) si aggiorna con
+`wizki -root <nome> upgrade`: la sposta in `<nome>/library/` e `<nome>/`
+diventa il progetto. Dopo, confronta i `.bak` con i file nuovi (eventuali
+personalizzazioni, anche di questo schema, vanno riportate a mano), cancellali
+e lancia `wizki lint`: le note vecchie possono non avere i campi nuovi (es.
+`summary:`, `published:`).
 
 `raw/` può stare su una cartella di rete montata (NAS con NFS, SMB, sshfs, rclone…):
-`./bin/wizki -root <nome> raw <cartella>` mostra il piano, `raw <cartella> -apply` lo
+`wizki raw <cartella>` mostra il piano, `raw <cartella> -apply` lo
 esegue. Copia gli originali verificandone lo SHA-256, lascia la vecchia raw come
 `raw.local-<data>` (da cancellare a mano dopo un controllo), trasforma `raw` in un
 link alla cartella remota e ci scrive il marcatore `.wizki-raw`. I path `raw/...`
@@ -75,10 +95,10 @@ nelle note restano validi. Se la condivisione non è montata (manca il marcatore
 
 ### Ingestion di una fonte
 
-`./bin/wizki inbox` elenca le fonti della inbox nell'ordine in cui acquisirle
+`wizki inbox` elenca le fonti della inbox nell'ordine in cui acquisirle
 (senza le immagini allegate a un documento, che si acquisiscono con quello).
 
-1. `./bin/wizki extract library/inbox/<file>` -> stampa il path del testo e,
+1. `wizki extract library/inbox/<file>` -> stampa il path del testo e,
    sulla riga dopo, l'id della fonte (primi 8 caratteri dello SHA-256 dell'originale).
    L'originale va in `raw/<tipo>/`, il testo in `raw/text/`:
    - **PDF**: testo con pdftotext. Se è una scansione, `wizki extract` fa da solo
@@ -155,8 +175,8 @@ nelle note restano validi. Se la condivisione non è montata (manca il marcatore
 10. Aggiorna `overview.md`: come la fonte rafforza o mette in discussione la
     "Tesi", i "Temi principali" (link ai topic) e le "Domande aperte". Se la
     fonte non cambia il quadro, lasciala com'è. Aggiorna `summary:`.
-11. `./bin/wizki index` per rigenerare `index.md`.
-12. `./bin/wizki log ingest "<titolo>"`.
+11. `wizki index` per rigenerare `index.md`.
+12. `wizki log ingest "<titolo>"`.
 
 Una fonte può toccare 10-15 pagine: è normale.
 
@@ -189,11 +209,11 @@ Una fonte può toccare 10-15 pagine: è normale.
    sezione manca, aggiungila) e dal "Vedi anche" delle entità.
 7. Se l'analisi risponde a una "Domanda aperta" di `overview.md`, sostituisci
    la domanda con il link all'analisi.
-8. `./bin/wizki index`, poi `./bin/wizki log query "<titolo>"`.
+8. `wizki index`, poi `wizki log query "<titolo>"`.
 
 ### Lint (su richiesta)
 
-1. `./bin/wizki lint` (exit 1 se ci sono warn). Controlli meccanici:
+1. `wizki lint` (exit 1 se ci sono warn). Controlli meccanici:
    - tag senza link e viceversa;
    - plurali o sinonimi tra topic;
    - note orfane;
@@ -231,8 +251,8 @@ Una fonte può toccare 10-15 pagine: è normale.
      modifica a questo file (vedi l'ultima regola).
 3. Presenta un report: ogni problema con pagina, motivo e correzione proposta.
    Non applicare nulla senza la mia conferma. Le domande che approvo vanno in
-   "Domande aperte" di `overview.md`. Dopo le correzioni, `./bin/wizki index`.
-4. Registra con `./bin/wizki log lint "<data>"`.
+   "Domande aperte" di `overview.md`. Dopo le correzioni, `wizki index`.
+4. Registra con `wizki log lint "<data>"`.
 
 ### Regole
 
@@ -250,7 +270,7 @@ Una fonte può toccare 10-15 pagine: è normale.
   a una fonte il cui nome contiene "scuola"; il percorso esatto ha la precedenza.
 - `log.md` e `index.md` sono esclusi dall'indice di zk (vedi `exclude` in `.zk/config.toml`):
   altrimenti l'indice, che linka tutto, nasconderebbe le note orfane.
-- Non modificare mai `index.md` a mano: si rigenera con `./bin/wizki index`
+- Non modificare mai `index.md` a mano: si rigenera con `wizki index`
   da `title:`, `summary:`, `tipo:` (o `type:`), `date:`, `published:` e dai link delle fonti.
 - Lancia zk sempre dalla radice del repo con `zk -W library ...`, mai `cd library && zk`.
   `ZK_NOTEBOOK_DIR` punta a un altro notebook, e `--notebook-dir` da solo non basta:
@@ -270,11 +290,20 @@ Una fonte può toccare 10-15 pagine: è normale.
 
 "LLM Wiki" pattern: raw sources are immutable, the wiki is markdown
 that you maintain, this file is the schema. Tools: `zk` (notes, tags, links)
-and `wizki` (this repo's Go binary: source extraction, index, log, lint).
+and `wizki` (Go binary: source extraction, index, log, lint).
 
-    go build -o bin/wizki .        # once; then ./bin/wizki ...
+    go install .        # from the wizki repo, once and after every update
+
+`go install` puts `wizki` in `$(go env GOPATH)/bin`, which must be in the `PATH`.
+Every command runs from the project root, the folder that holds this file.
 
 ### Structure
+
+    <project>/
+    ├── CLAUDE.md         this schema
+    ├── README.md         user guide
+    ├── .claude/commands/ /ingest and /lint
+    └── library/          the wiki
 
     library/
     ├── inbox/            sources to process (PDF, .md, .txt, .html, images, .csv/.tsv/.json)
@@ -295,16 +324,21 @@ Every page (source, topic, entity, analysis, overview) has a `summary:` in its f
 a **one-line** summary that goes into the index. Keep it up to date when the
 page changes.
 
-A new wiki is created with `./bin/wizki init <name>`. It first checks the dependencies
+A new wiki is created with `wizki init <name>`. It first checks the dependencies
 (git, poppler, tesseract with the OCR language, zk) and, if something is missing,
 proposes the command to install it with the package manager (pacman, apt, dnf, brew),
 asking for confirmation before running it; without git it stops. The same check
-can be run at any time with `./bin/wizki deps`. Then it creates `./<name>/` with this
-layout (a `.gitkeep` per folder, an empty `overview.md`, an initial `index.md`), `.zk/` (config and templates of the chosen language), `.gitignore`
-and a git repository (`git init -b master`). It never overwrites anything: running it
-again only fills in what is missing. Then use it with `-root <name>` (or `WIKI_ROOT`); with neither, wizki uses the current folder if it is a wiki, otherwise `library/`.
+can be run at any time with `wizki deps`. Then it creates the project `./<name>/`,
+with `README.md`, this `CLAUDE.md`, `.claude/commands/` and a git repository
+(`git init -b master`), and inside it the wiki `./<name>/library/` with this
+layout (a `.gitkeep` per folder, an empty `overview.md`, an initial `index.md`),
+`.zk/` (config and templates of the chosen language) and `.gitignore`. It never
+overwrites anything: running it again only fills in what is missing. Then you
+work from the project: `cd <name>` and `claude`. wizki finds the wiki on its
+own: `-root` (or `WIKI_ROOT`) if given, otherwise the current folder if it is a
+wiki, otherwise `library/`; if `-root` points to a project, it uses its `library/`.
 
-The language is chosen at creation: `./bin/wizki init <name> --locale en` (default
+The language is chosen at creation: `wizki init <name> --locale en` (default
 `it`). It covers everything: zk config and templates (English from `locales/en/zk/`,
 Italian from `library/.zk/`), `overview.md`, `index.md`, fixed values (`type:` with `zk new entities ... --extra type=<type>`,
 and `person`, `place`… for entities, `published: unknown`), lint and CLI
@@ -317,15 +351,20 @@ live in the `i18n/dict.go` dictionary. `-locale` (or `WIKI_LOCALE`) picks the
 language of commands without a wiki (`deps`, `slug`).
 
 To bring a wiki created with an earlier version up to the current layout:
-`./bin/wizki -root <name> upgrade` shows what it would do, `upgrade -apply` does it.
-It creates what is missing, replaces the `.zk/` files that differ from the embedded
-ones (saving the old one as `<file>.bak`) and regenerates `index.md`; it never touches notes.
-Afterwards, compare the `.bak` files with the new ones (any customizations must be
-carried over by hand), delete them and run `./bin/wizki -root <name> lint`: old
-notes may lack the new fields (e.g. `summary:`, `published:`).
+`wizki upgrade` shows what it would do, `upgrade -apply` does it. It creates
+what is missing and replaces the `.zk/` files and the project files
+(`README.md`, `CLAUDE.md`, `.claude/commands/`) that differ from the embedded
+ones, saving the old one as `<file>.bak`. Then it regenerates `index.md`. It
+never touches notes. A wiki with the previous layout (wiki and git repository in
+the same folder, created by an older `init`) is upgraded with
+`wizki -root <name> upgrade`: it moves the wiki into `<name>/library/` and
+`<name>/` becomes the project. Afterwards, compare the `.bak` files with the new
+ones (any customizations, of this schema too, must be carried over by hand),
+delete them and run `wizki lint`: old notes may lack the new fields (e.g.
+`summary:`, `published:`).
 
 `raw/` can live on a mounted network folder (NAS via NFS, SMB, sshfs, rclone…):
-`./bin/wizki -root <name> raw <folder>` shows the plan, `raw <folder> -apply` runs it.
+`wizki raw <folder>` shows the plan, `raw <folder> -apply` runs it.
 It copies the originals verifying their SHA-256, keeps the old raw as
 `raw.local-<date>` (delete it by hand after checking), turns `raw` into a link
 to the remote folder and writes the `.wizki-raw` marker there. The `raw/...` paths
@@ -334,10 +373,10 @@ in notes stay valid. If the share is not mounted (the marker is missing),
 
 ### Ingesting a source
 
-`./bin/wizki inbox` lists the sources in the inbox in the order to ingest them
+`wizki inbox` lists the sources in the inbox in the order to ingest them
 (without the images attached to a document, which are ingested with it).
 
-1. `./bin/wizki extract library/inbox/<file>` -> prints the path of the text and,
+1. `wizki extract library/inbox/<file>` -> prints the path of the text and,
    on the next line, the source's id (first 8 chars of the original's SHA-256).
    The original goes into `raw/<type>/`, the text into `raw/text/`:
    - **PDF**: text via pdftotext. If it is a scan, `wizki extract` runs OCR on
@@ -414,8 +453,8 @@ in notes stay valid. If the share is not mounted (the marker is missing),
     "Tesi" (Thesis), the "Temi principali" (Main themes, links to topics) and the
     "Domande aperte" (Open questions). If the source does not change the picture,
     leave it as is. Update `summary:`.
-11. `./bin/wizki index` to regenerate `index.md`.
-12. `./bin/wizki log ingest "<title>"`.
+11. `wizki index` to regenerate `index.md`.
+12. `wizki log ingest "<title>"`.
 
 A single source may touch 10-15 pages: that's normal.
 
@@ -448,11 +487,11 @@ A single source may touch 10-15 pages: that's normal.
    the section if it is missing) and from the "Vedi anche" of the entities.
 7. If the analysis answers an "open question" in `overview.md`, replace the
    question with the link to the analysis.
-8. `./bin/wizki index`, then `./bin/wizki log query "<title>"`.
+8. `wizki index`, then `wizki log query "<title>"`.
 
 ### Lint (on request)
 
-1. `./bin/wizki lint` (exit 1 if there are warnings). Mechanical checks:
+1. `wizki lint` (exit 1 if there are warnings). Mechanical checks:
    - tags without links and vice versa;
    - plurals or synonyms among topics;
    - orphan notes;
@@ -490,8 +529,8 @@ A single source may touch 10-15 pages: that's normal.
      change to this file (see the last rule).
 3. Present a report: each problem with page, reason and proposed fix.
    Apply nothing without my confirmation. The questions I approve go into
-   "Domande aperte" (Open questions) in `overview.md`. After the fixes, `./bin/wizki index`.
-4. Record with `./bin/wizki log lint "<date>"`.
+   "Domande aperte" (Open questions) in `overview.md`. After the fixes, `wizki index`.
+4. Record with `wizki log lint "<date>"`.
 
 ### Rules
 
@@ -509,7 +548,7 @@ A single source may touch 10-15 pages: that's normal.
   to a source whose name contains "scuola"; the exact path takes precedence.
 - `log.md` and `index.md` are excluded from the zk index (see `exclude` in `.zk/config.toml`):
   otherwise the index, which links everything, would hide orphan notes.
-- Never edit `index.md` by hand: it is regenerated with `./bin/wizki index`
+- Never edit `index.md` by hand: it is regenerated with `wizki index`
   from `title:`, `summary:`, `tipo:` (or `type:`), `date:`, `published:` and the links of the sources.
 - Always run zk from the repo root with `zk -W library ...`, never `cd library && zk`.
   `ZK_NOTEBOOK_DIR` points to another notebook, and `--notebook-dir` alone is not enough:

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -409,54 +410,89 @@ func TestLogAppendOnly(t *testing.T) {
 	}
 }
 
+// TestInitCreaLaWiki: `init mia` crea il progetto mia/ (README.md, CLAUDE.md,
+// comandi di Claude Code, repository git) con la wiki in mia/library/.
 func TestInitCreaLaWiki(t *testing.T) {
 	t.Chdir(t.TempDir())
 	code, out, errb := do(t, "init", "mia")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	for _, p := range []string{".", "inbox", "raw", "raw/pdf", "raw/doc", "raw/assets", "raw/data", "raw/epub", "raw/text", "sources", "topics", "entities", "analyses", ".zk", ".zk/templates", ".git"} {
-		if fi, err := os.Stat(filepath.Join("mia", p)); err != nil || !fi.IsDir() {
-			t.Errorf("manca la cartella %s", p)
+	lib := filepath.Join("mia", "library")
+	for _, p := range []string{".", "inbox", "raw", "raw/pdf", "raw/doc", "raw/assets", "raw/data", "raw/epub", "raw/text", "sources", "topics", "entities", "analyses", ".zk", ".zk/templates"} {
+		if fi, err := os.Stat(filepath.Join(lib, p)); err != nil || !fi.IsDir() {
+			t.Errorf("manca la cartella library/%s", p)
 		}
-		if p == ".git" {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join("mia", p, ".gitkeep")); err != nil {
-			t.Errorf("manca %s/.gitkeep", p)
+		if _, err := os.Stat(filepath.Join(lib, p, ".gitkeep")); err != nil {
+			t.Errorf("manca library/%s/.gitkeep", p)
 		}
 	}
-	cfg, _ := os.ReadFile(filepath.Join("mia", ".zk", "config.toml"))
+	if fi, err := os.Stat(filepath.Join("mia", ".git")); err != nil || !fi.IsDir() {
+		t.Error("manca il repository git nella radice del progetto")
+	}
+	if _, err := os.Stat(filepath.Join(lib, ".git")); err == nil {
+		t.Error("repository git dentro library/")
+	}
+	cfg, _ := os.ReadFile(filepath.Join(lib, ".zk", "config.toml"))
 	want, _ := zkConfig.ReadFile("library/.zk/config.toml")
 	if len(cfg) == 0 || !bytes.Equal(cfg, want) {
 		t.Error("config.toml diverso da quello incorporato")
 	}
-	for _, p := range []string{".zk/templates/source.md", ".zk/templates/topic.md", ".zk/templates/entity.md", ".zk/templates/analysis.md", "overview.md", "index.md"} {
-		if _, err := os.Stat(filepath.Join("mia", p)); err != nil {
-			t.Errorf("manca %s", p)
+	for rel, src := range map[string]string{
+		"README.md":                  "locales/it/README.md",
+		"CLAUDE.md":                  "CLAUDE.md",
+		".claude/commands/ingest.md": ".claude/commands/ingest.md",
+		".claude/commands/lint.md":   ".claude/commands/lint.md",
+	} {
+		got, _ := os.ReadFile(filepath.Join("mia", rel))
+		if want, _ := zkConfig.ReadFile(src); len(got) == 0 || !bytes.Equal(got, want) {
+			t.Errorf("%s diverso da %s incorporato", rel, src)
 		}
 	}
-	if b, _ := os.ReadFile(filepath.Join("mia", "log.md")); string(b) != "# Log: mia\n\n" {
+	for _, p := range []string{".zk/templates/source.md", ".zk/templates/topic.md", ".zk/templates/entity.md", ".zk/templates/analysis.md", "overview.md", "index.md"} {
+		if _, err := os.Stat(filepath.Join(lib, p)); err != nil {
+			t.Errorf("manca library/%s", p)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(lib, "log.md")); string(b) != "# Log: mia\n\n" {
 		t.Errorf("log.md = %q", b)
 	}
-	if b, _ := os.ReadFile(filepath.Join("mia", ".gitignore")); !strings.Contains(string(b), ".zk/notebook.db") {
+	if b, _ := os.ReadFile(filepath.Join(lib, ".gitignore")); !strings.Contains(string(b), ".zk/notebook.db") {
 		t.Errorf(".gitignore = %q", b)
 	}
 	head, _ := os.ReadFile(filepath.Join("mia", ".git", "HEAD"))
 	if strings.TrimSpace(string(head)) != "ref: refs/heads/master" {
 		t.Errorf("HEAD = %q", head)
 	}
-	if !strings.Contains(out, `wiki "mia" pronta`) {
+	if !strings.Contains(out, `progetto "mia" pronto`) {
 		t.Errorf("out = %s", out)
 	}
 }
 
+// TestProgettoSenzaRoot: dentro un progetto i comandi trovano la wiki in
+// library/ senza -root; da fuori basta -root <progetto>.
+func TestProgettoSenzaRoot(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code, _, errb := do(t, "init", "mia"); code != 0 {
+		t.Fatalf("init: %s", errb)
+	}
+	_ = os.WriteFile(filepath.Join("mia", "library", "inbox", "a.txt"), []byte("testo"), 0o644)
+	if code, out, errb := do(t, "-root", "mia", "inbox"); code != 0 || strings.TrimSpace(out) != "a.txt" {
+		t.Errorf("-root mia: exit %d, out %q, err %q", code, out, errb)
+	}
+	t.Chdir("mia")
+	if code, out, errb := do(t, "inbox"); code != 0 || strings.TrimSpace(out) != "a.txt" {
+		t.Errorf("dal progetto: exit %d, out %q, err %q", code, out, errb)
+	}
+}
+
+// TestInitNonSovrascrive: rilanciata, init completa senza toccare ciò che c'è.
 func TestInitNonSovrascrive(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if code, _, errb := do(t, "init", "mia"); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	log := filepath.Join("mia", "log.md")
+	log := filepath.Join("mia", "library", "log.md")
 	if err := os.WriteFile(log, []byte("mio log\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -467,10 +503,25 @@ func TestInitNonSovrascrive(t *testing.T) {
 	if b, _ := os.ReadFile(log); string(b) != "mio log\n" {
 		t.Errorf("log.md sovrascritto: %q", b)
 	}
-	for _, want := range []string{"già presente: mia/log.md", "già presente: mia/.git"} {
+	for _, want := range []string{"già presente: mia/library/log.md", "già presente: mia/README.md", "già presente: mia/.git"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("manca %q in:\n%s", want, out)
 		}
+	}
+}
+
+// TestInitLayoutPrecedente: init non completa una wiki col layout vecchio
+// (wiki nella radice), rimanda a upgrade e non crea nulla.
+func TestInitLayoutPrecedente(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_ = os.MkdirAll(filepath.Join("vecchia", ".zk"), 0o755)
+	_ = os.WriteFile(filepath.Join("vecchia", ".zk", "config.toml"), []byte("[note]\nlanguage = \"it\"\n"), 0o644)
+	code, _, errb := do(t, "init", "vecchia")
+	if code != 1 || !strings.Contains(errb, "wizki -root vecchia upgrade") {
+		t.Errorf("exit %d: %s", code, errb)
+	}
+	if _, err := os.Stat(filepath.Join("vecchia", "library")); err == nil {
+		t.Error("creata library/ in una wiki col layout precedente")
 	}
 }
 
@@ -533,26 +584,40 @@ esac
 	}
 }
 
-// TestUpgrade: senza -apply non cambia nulla; con -apply aggiorna la config
-// (con .bak), crea ciò che manca, rigenera index.md e non tocca le note;
-// rilanciato, non ha più niente da fare.
+// TestUpgrade: senza -apply non cambia nulla; con -apply aggiorna config e
+// file del progetto (con .bak), crea ciò che manca, rigenera index.md e non
+// tocca le note; rilanciato, non ha più niente da fare.
 func TestUpgrade(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if code, _, errb := do(t, "init", "w"); code != 0 {
 		t.Fatalf("init: %s", errb)
 	}
-	cfg := filepath.Join("w", ".zk", "config.toml")
+	lib := filepath.Join("w", "library")
+	cfg := filepath.Join(lib, ".zk", "config.toml")
 	_ = os.WriteFile(cfg, []byte("vecchia\n"), 0o644)
-	_ = os.RemoveAll(filepath.Join("w", "entities"))
-	_ = os.Remove(filepath.Join("w", "index.md"))
-	note := filepath.Join("w", "topics", "mia.md")
+	readme := filepath.Join("w", "README.md")
+	_ = os.WriteFile(readme, []byte("mio readme\n"), 0o644)
+	_ = os.Remove(filepath.Join("w", ".claude", "commands", "lint.md"))
+	_ = os.RemoveAll(filepath.Join(lib, "entities"))
+	_ = os.Remove(filepath.Join(lib, "index.md"))
+	note := filepath.Join(lib, "topics", "mia.md")
 	_ = os.WriteFile(note, []byte("---\ntitle: mia\n---\n"), 0o644)
 
 	code, out, errb := do(t, "-root", "w", "upgrade")
-	if code != 0 || !strings.Contains(out, "prova: nessuna modifica") ||
-		!strings.Contains(out, "aggiorna: w/.zk/config.toml (copia del vecchio in w/.zk/config.toml.bak)") ||
-		!strings.Contains(out, "crea: w/entities/") || !strings.Contains(out, "crea: w/index.md") {
-		t.Fatalf("prova: exit %d\n%s%s", code, out, errb)
+	for _, want := range []string{
+		"prova: nessuna modifica",
+		"aggiorna: w/library/.zk/config.toml (copia del vecchio in w/library/.zk/config.toml.bak)",
+		"aggiorna: w/README.md (copia del vecchio in w/README.md.bak)",
+		"crea: w/.claude/commands/lint.md",
+		"crea: w/library/entities/",
+		"crea: w/library/index.md",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prova: manca %q in\n%s%s", want, out, errb)
+		}
+	}
+	if code != 0 {
+		t.Fatalf("prova: exit %d", code)
 	}
 	if b, _ := os.ReadFile(cfg); string(b) != "vecchia\n" {
 		t.Error("la prova ha modificato la config")
@@ -568,20 +633,134 @@ func TestUpgrade(t *testing.T) {
 	if b, _ := os.ReadFile(cfg + ".bak"); string(b) != "vecchia\n" {
 		t.Errorf("copia .bak = %q", b)
 	}
-	for _, p := range []string{"entities/.gitkeep", "index.md"} {
+	if b, _ := os.ReadFile(readme); !bytes.Contains(b, []byte("wizki init")) {
+		t.Errorf("README.md non aggiornato: %q", b)
+	}
+	if b, _ := os.ReadFile(readme + ".bak"); string(b) != "mio readme\n" {
+		t.Errorf("README.md.bak = %q", b)
+	}
+	for _, p := range []string{"library/entities/.gitkeep", "library/index.md", ".claude/commands/lint.md"} {
 		if _, err := os.Stat(filepath.Join("w", p)); err != nil {
 			t.Errorf("manca %s", p)
 		}
 	}
-	if idx, _ := os.ReadFile(filepath.Join("w", "index.md")); !strings.Contains(string(idx), "[[topics/mia|mia]]") {
+	if idx, _ := os.ReadFile(filepath.Join(lib, "index.md")); !strings.Contains(string(idx), "[[topics/mia|mia]]") {
 		t.Errorf("index.md non rigenerato:\n%s", idx)
 	}
 	if b, _ := os.ReadFile(note); string(b) != "---\ntitle: mia\n---\n" {
 		t.Errorf("nota modificata: %q", b)
 	}
 
-	if code, out, _ = do(t, "-root", "w", "upgrade"); code != 0 || !strings.Contains(out, "w è già aggiornata") {
+	if code, out, _ = do(t, "-root", "w", "upgrade"); code != 0 || !strings.Contains(out, "w/library è già aggiornata") {
 		t.Errorf("secondo giro: exit %d\n%s", code, out)
+	}
+}
+
+// TestUpgradeMigra: una wiki col layout precedente (wiki e .git nella stessa
+// cartella) viene spostata in library/, con i file del progetto accanto; la
+// prova non sposta nulla; dopo, -root sul progetto trova la wiki.
+func TestUpgradeMigra(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg, _ := zkConfig.ReadFile("library/.zk/config.toml")
+	files := map[string]string{
+		".git/HEAD":           "ref: refs/heads/master\n",
+		".zk/config.toml":     string(cfg),
+		".gitignore":          "/.zk/notebook.db\n",
+		"log.md":              "# Log: w\n\nstoria\n",
+		"overview.md":         "---\ntitle: Panoramica\nsummary: tesi\n---\n",
+		"topics/mia.md":       "---\ntitle: mia\nsummary: s\n---\n",
+		"raw/pdf/a.pdf":       "%PDF",
+		"README.md":           "readme della versione prima\n",
+		"inbox/da-leggere.md": "x",
+	}
+	for rel, c := range files {
+		p := filepath.Join("w", rel)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(c), 0o644)
+	}
+
+	code, out, errb := do(t, "-root", "w", "upgrade")
+	for _, want := range []string{
+		"crea: w/library/",
+		"sposta: w/topics -> w/library/topics",
+		"sposta: w/.zk -> w/library/.zk",
+		"aggiorna: w/README.md (copia del vecchio in w/README.md.bak)",
+		"crea: w/CLAUDE.md",
+		"crea: w/library/entities/",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prova: manca %q in\n%s%s", want, out, errb)
+		}
+	}
+	// in prova non si propone di ricreare ciò che verrà spostato
+	lines := strings.Split(out, "\n")
+	for _, bad := range []string{"sposta: w/.git -> w/library/.git", "sposta: w/README.md -> w/library/README.md", "crea: w/library/topics/", "crea: w/library/log.md"} {
+		if slices.Contains(lines, bad) {
+			t.Errorf("prova: non atteso %q in\n%s", bad, out)
+		}
+	}
+	if strings.Contains(out, "aggiorna: w/library/.zk/config.toml") {
+		t.Errorf("prova: la config uguale va lasciata com'è\n%s", out)
+	}
+	if code != 0 {
+		t.Fatalf("prova: exit %d", code)
+	}
+	if _, err := os.Stat(filepath.Join("w", "library")); err == nil {
+		t.Fatal("la prova ha creato library/")
+	}
+
+	if code, out, errb = do(t, "-root", "w", "upgrade", "-apply"); code != 0 || !strings.Contains(out, "la wiki ora è in w/library") {
+		t.Fatalf("apply: exit %d\n%s%s", code, out, errb)
+	}
+	for rel, c := range files {
+		p := filepath.Join("w", "library", rel)
+		switch rel {
+		case ".git/HEAD", "README.md":
+			p = filepath.Join("w", rel)
+		}
+		if rel == "README.md" {
+			p += ".bak"
+		}
+		if b, _ := os.ReadFile(p); string(b) != c {
+			t.Errorf("%s = %q, atteso %q", p, b, c)
+		}
+	}
+	for _, p := range []string{"CLAUDE.md", ".claude/commands/ingest.md", "library/entities/.gitkeep", "library/index.md"} {
+		if _, err := os.Stat(filepath.Join("w", p)); err != nil {
+			t.Errorf("manca %s", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join("w", "topics")); err == nil {
+		t.Error("topics/ è rimasta nella radice")
+	}
+	if code, out, _ = do(t, "-root", "w", "upgrade"); code != 0 || !strings.Contains(out, "è già aggiornata") {
+		t.Errorf("secondo giro: exit %d\n%s", code, out)
+	}
+	if code, _, errb = do(t, "init", "w"); code != 0 {
+		t.Errorf("init dopo la migrazione: exit %d %s", code, errb)
+	}
+}
+
+// TestUpgradeRepoWizki: la library/ del repo di wizki è una wiki senza
+// progetto: upgrade non scrive README.md o CLAUDE.md nel repo.
+func TestUpgradeRepoWizki(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_ = os.MkdirAll(".git", 0o755)
+	_ = os.WriteFile("go.mod", []byte("module wizki\n\ngo 1.25\n"), 0o644)
+	_ = os.WriteFile("README.md", []byte("readme di wizki\n"), 0o644)
+	cfg, _ := zkConfig.ReadFile("library/.zk/config.toml")
+	_ = os.MkdirAll(filepath.Join("library", ".zk"), 0o755)
+	_ = os.WriteFile(filepath.Join("library", ".zk", "config.toml"), cfg, 0o644)
+	if code, out, errb := do(t, "upgrade", "-apply"); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out, errb)
+	}
+	if b, _ := os.ReadFile("README.md"); string(b) != "readme di wizki\n" {
+		t.Errorf("README.md del repo toccato: %q", b)
+	}
+	for _, p := range []string{"CLAUDE.md", ".claude", "README.md.bak"} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("creato %s nel repo di wizki", p)
+		}
 	}
 }
 
@@ -838,7 +1017,7 @@ func TestRawRemota(t *testing.T) {
 	if code, _, errb := do(t, "init", "w"); code != 0 {
 		t.Fatalf("init: %s", errb)
 	}
-	old := filepath.Join("w", "inbox", "vecchio.md")
+	old := filepath.Join("w", "library", "inbox", "vecchio.md")
 	_ = os.WriteFile(old, []byte("prima\n"), 0o644)
 	if code, _, errb := do(t, "-root", "w", "extract", old); code != 0 {
 		t.Fatalf("extract locale: %s", errb)
@@ -849,7 +1028,7 @@ func TestRawRemota(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "prova: nessuna modifica") {
 		t.Fatalf("prova: exit %d\n%s%s", code, out, errb)
 	}
-	if fi, _ := os.Lstat(filepath.Join("w", "raw")); fi.Mode()&os.ModeSymlink != 0 {
+	if fi, _ := os.Lstat(filepath.Join("w", "library", "raw")); fi.Mode()&os.ModeSymlink != 0 {
 		t.Fatal("la prova ha creato il link")
 	}
 	if code, out, errb = do(t, "-root", "w", "raw", nas, "-apply"); code != 0 {
@@ -858,10 +1037,14 @@ func TestRawRemota(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(nas, "doc", "vecchio.md")); string(b) != "prima\n" {
 		t.Errorf("originale non copiato: %q", b)
 	}
-	if target, _ := os.Readlink(filepath.Join("w", "raw")); target != nas {
+	// il marcatore porta il nome del progetto, non "library"
+	if b, _ := os.ReadFile(filepath.Join(nas, ".wizki-raw")); core.RawMarkerWiki(string(b)) != "w" {
+		t.Errorf("marcatore = %q", b)
+	}
+	if target, _ := os.Readlink(filepath.Join("w", "library", "raw")); target != nas {
 		t.Errorf("link = %q", target)
 	}
-	backups, _ := filepath.Glob(filepath.Join("w", "raw.local-*", "doc", "vecchio.md"))
+	backups, _ := filepath.Glob(filepath.Join("w", "library", "raw.local-*", "doc", "vecchio.md"))
 	if len(backups) != 1 {
 		t.Errorf("manca la copia locale: %v", backups)
 	}
@@ -869,7 +1052,7 @@ func TestRawRemota(t *testing.T) {
 		t.Errorf("secondo giro: %s", out)
 	}
 
-	nuovo := filepath.Join("w", "inbox", "nuovo.md")
+	nuovo := filepath.Join("w", "library", "inbox", "nuovo.md")
 	_ = os.WriteFile(nuovo, []byte("dopo\n"), 0o644)
 	if code, _, errb = do(t, "-root", "w", "extract", nuovo); code != 0 {
 		t.Fatalf("extract remoto: %s", errb)
@@ -879,7 +1062,7 @@ func TestRawRemota(t *testing.T) {
 	}
 
 	_ = os.Remove(filepath.Join(nas, ".wizki-raw")) // come un punto di mount vuoto
-	terzo := filepath.Join("w", "inbox", "terzo.md")
+	terzo := filepath.Join("w", "library", "inbox", "terzo.md")
 	_ = os.WriteFile(terzo, []byte("ancora\n"), 0o644)
 	if code, _, errb = do(t, "-root", "w", "extract", terzo); code != 6 || !strings.Contains(errb, "montata") {
 		t.Errorf("non montata: exit %d %s", code, errb)
@@ -901,12 +1084,15 @@ func TestInitLocaleEn(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)
 	}
-	if !strings.Contains(out, `wiki "mine" ready`) || !strings.Contains(out, "created: mine/log.md") {
+	if !strings.Contains(out, `project "mine" ready`) || !strings.Contains(out, "created: mine/library/log.md") {
 		t.Errorf("out = %s", out)
 	}
+	lib := filepath.Join("mine", "library")
 	for rel, src := range map[string]string{
-		".zk/config.toml":         "locales/en/zk/config.toml",
-		".zk/templates/entity.md": "locales/en/zk/templates/entity.md",
+		"library/.zk/config.toml":         "locales/en/zk/config.toml",
+		"library/.zk/templates/entity.md": "locales/en/zk/templates/entity.md",
+		"README.md":                       "locales/en/README.md",
+		"CLAUDE.md":                       "CLAUDE.md",
 	} {
 		got, _ := os.ReadFile(filepath.Join("mine", rel))
 		want, _ := zkConfig.ReadFile(src)
@@ -914,14 +1100,14 @@ func TestInitLocaleEn(t *testing.T) {
 			t.Errorf("%s diverso da %s", rel, src)
 		}
 	}
-	if b, _ := os.ReadFile(filepath.Join("mine", "overview.md")); !strings.Contains(string(b), "## Open questions") {
+	if b, _ := os.ReadFile(filepath.Join(lib, "overview.md")); !strings.Contains(string(b), "## Open questions") {
 		t.Errorf("overview.md = %q", b)
 	}
-	if b, _ := os.ReadFile(filepath.Join("mine", "index.md")); !strings.Contains(string(b), "## Topics (0)\n\n_(no pages)_") {
+	if b, _ := os.ReadFile(filepath.Join(lib, "index.md")); !strings.Contains(string(b), "## Topics (0)\n\n_(no pages)_") {
 		t.Errorf("index.md = %q", b)
 	}
 	// i comandi sulla wiki parlano inglese anche senza flag
-	_ = os.WriteFile(filepath.Join("mine", "sources", "a.md"), []byte("---\ntitle: A\nsummary: s\npublished: unknown\n---\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(lib, "sources", "a.md"), []byte("---\ntitle: A\nsummary: s\npublished: unknown\n---\n"), 0o644)
 	fakeBin(t, "zk", `exit 0`)
 	code, out, _ = do(t, "-root", "mine", "lint")
 	if code != 1 || !strings.Contains(out, "index.md: out of date: run `wizki index`") || strings.Contains(out, "published:") {
@@ -931,11 +1117,11 @@ func TestInitLocaleEn(t *testing.T) {
 		t.Errorf("upgrade: exit %d\n%s", code, out)
 	}
 	// rilanciata senza --locale, init completa la wiki nella sua lingua
-	_ = os.Remove(filepath.Join("mine", ".zk", "templates", "topic.md"))
-	if code, out, errb = do(t, "init", "mine"); code != 0 || !strings.Contains(out, "already there: mine/log.md") {
+	_ = os.Remove(filepath.Join(lib, ".zk", "templates", "topic.md"))
+	if code, out, errb = do(t, "init", "mine"); code != 0 || !strings.Contains(out, "already there: mine/library/log.md") {
 		t.Fatalf("seconda init: exit %d\n%s%s", code, out, errb)
 	}
-	got, _ := os.ReadFile(filepath.Join("mine", ".zk", "templates", "topic.md"))
+	got, _ := os.ReadFile(filepath.Join(lib, ".zk", "templates", "topic.md"))
 	if want, _ := zkConfig.ReadFile("locales/en/zk/templates/topic.md"); !bytes.Equal(got, want) {
 		t.Errorf("topic.md ricreato in un'altra lingua: %q", got)
 	}

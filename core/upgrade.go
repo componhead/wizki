@@ -24,8 +24,8 @@ func BackupPath(path, stamp string, taken map[string]bool) string {
 }
 
 // PlanUpgrade porta la wiki con radice root alla versione attuale del layout:
-//   - crea ciò che manca (cartelle, .gitkeep, config e template zk, log.md,
-//     overview.md, .gitignore);
+//   - crea ciò che manca (cartelle, .gitkeep, config e template zk, log.md
+//     intestato a logName, overview.md, .gitignore);
 //   - sostituisce, con copia di sicurezza, i file della configurazione zk
 //     (zkFiles: path relativo alla radice -> contenuto) che esistono ma sono
 //     diversi; have contiene il contenuto attuale di quelli che esistono;
@@ -33,27 +33,35 @@ func BackupPath(path, stamp string, taken map[string]bool) string {
 //
 // index.md non è nel piano: è generato, lo si rigenera dopo l'aggiornamento.
 // exists dice quali path del layout esistono già.
-func PlanUpgrade(root string, zkFiles, have map[string][]byte, exists map[string]bool, stamp string) []Step {
-	zkPath := map[string][]byte{}
-	for rel, data := range zkFiles {
-		zkPath[filepath.Join(root, rel)] = data
+func PlanUpgrade(root, logName string, zkFiles, have map[string][]byte, exists map[string]bool, stamp string) []Step {
+	return planManaged(Layout(root, logName, zkFiles), root, zkFiles, have, exists, stamp, filepath.Join(root, IndexPath))
+}
+
+// planManaged filtra il piano di creazione layout (radice root): tiene le
+// cartelle e i file che mancano e trasforma in Replace i file gestiti
+// (managed: path relativo a root -> contenuto) che esistono ma sono diversi.
+// skip è un path da lasciare fuori ("" per nessuno).
+func planManaged(layout []Step, root string, managed, have map[string][]byte, exists map[string]bool, stamp, skip string) []Step {
+	want := map[string][]byte{}
+	for rel, data := range managed {
+		want[filepath.Join(root, rel)] = data
 	}
 	var steps []Step
-	for _, s := range Layout(root, filepath.Base(root), zkFiles) {
+	for _, s := range layout {
 		switch s := s.(type) {
 		case Mkdir:
 			if !exists[s.Path] {
 				steps = append(steps, s)
 			}
 		case WriteFile:
-			if s.Path == filepath.Join(root, IndexPath) {
+			if s.Path == skip {
 				continue
 			}
-			want, managed := zkPath[s.Path]
+			data, isManaged := want[s.Path]
 			cur, present := have[s.Path]
 			switch {
-			case managed && present && !bytes.Equal(cur, want):
-				steps = append(steps, Replace{Path: s.Path, Backup: BackupPath(s.Path, stamp, exists), Data: want})
+			case isManaged && present && !bytes.Equal(cur, data):
+				steps = append(steps, Replace{Path: s.Path, Backup: BackupPath(s.Path, stamp, exists), Data: data})
 			case !exists[s.Path] && !present:
 				steps = append(steps, s)
 			}

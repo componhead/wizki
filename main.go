@@ -13,8 +13,9 @@
 //	wizki [-root library] lint                     controlli di salute (exit 1 se ci sono warn)
 //	wizki [-root library] index                    rigenera index.md: catalogo delle pagine con il loro summary:
 //	wizki [-root library] upgrade [-apply]          porta una wiki esistente al layout e alla config zk
-//	                                              attuali (copia .bak dei file sostituiti); senza -apply
-//	                                              mostra solo cosa farebbe; non tocca le note
+//	                                              attuali (copia .bak dei file sostituiti), compresi i file
+//	                                              del progetto; sposta in library/ una wiki col layout
+//	                                              precedente; senza -apply mostra solo cosa farebbe; non tocca le note
 //	wizki [-ocr-lang ita] deps                     controlla le dipendenze (anche le lingue OCR) e propone
 //	                                              il comando per installare ciò che manca (exit 1 se manca)
 //	wizki [-root library] raw <cartella> [-apply]  sposta raw/ in una cartella di rete montata (copia
@@ -24,9 +25,11 @@
 //	wizki [-locale it|en] deps|slug ...            lingua dei comandi senza wiki (anche WIKI_LOCALE); sulle
 //	                                              wiki vale sempre la loro (language di .zk/config.toml)
 //	wizki init <nome> [--locale it|en]             controlla le dipendenze come deps (senza git si ferma), poi
-//	                                              crea la wiki ./<nome>/ (cartelle, .zk/, log.md, overview.md, index.md,
-//	                                              .gitignore, git init -b master); non sovrascrive nulla
+//	                                              crea il progetto ./<nome>/ (README.md, CLAUDE.md, .claude/commands/,
+//	                                              git init -b master) con la wiki in ./<nome>/library/ (cartelle,
+//	                                              .zk/, log.md, overview.md, index.md, .gitignore); non sovrascrive nulla
 //	-root: senza -root né WIKI_ROOT vale la cartella corrente se è una wiki (.zk/config.toml), altrimenti library;
+//	       se -root è un progetto (la wiki è nella sua library/), vale quella;
 //	       i comandi di wiki su una cartella che non è una wiki si fermano mostrando il percorso assoluto
 package main
 
@@ -56,7 +59,18 @@ var zkDirs = map[string]string{"it": "library/.zk", "en": "locales/en/zk"}
 //
 //go:embed library/.zk/config.toml library/.zk/templates/source.md library/.zk/templates/topic.md library/.zk/templates/entity.md library/.zk/templates/analysis.md
 //go:embed locales/en/zk/config.toml locales/en/zk/templates/source.md locales/en/zk/templates/topic.md locales/en/zk/templates/entity.md locales/en/zk/templates/analysis.md
+//go:embed locales/it/README.md locales/en/README.md
+//go:embed CLAUDE.md .claude/commands/ingest.md .claude/commands/lint.md
 var zkConfig embed.FS
+
+// readmes: per lingua, il README.md (nell'embed) che spiega l'uso del
+// progetto, copiato da `wizki init` nella sua radice.
+var readmes = map[string]string{"it": "locales/it/README.md", "en": "locales/en/README.md"}
+
+// schemaFiles sono i file del progetto uguali in ogni lingua: lo schema
+// (CLAUDE.md, bilingue) e i comandi di Claude Code. Il path nell'embed è
+// anche quello nel progetto.
+var schemaFiles = []string{"CLAUDE.md", ".claude/commands/ingest.md", ".claude/commands/lint.md"}
 
 // wikiCommands sono i comandi che lavorano su una wiki esistente: parlano la
 // lingua della wiki (language in .zk/config.toml).
@@ -98,6 +112,10 @@ func run(ctx context.Context, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	if wikiCommands[rest[0]] {
+		// -root su un progetto: la wiki è nella sua library/
+		if lib := filepath.Join(*root, core.LibraryDir); !isWiki(*root) && isWiki(lib) {
+			*root = lib
+		}
 		if !isWiki(*root) {
 			fmt.Fprintln(errw, d.ErrorPrefix, fmt.Sprintf(d.NotAWikiInit, displayPath(*root)))
 			return 1
@@ -375,16 +393,21 @@ func inbox(root string, out io.Writer) error {
 	return nil
 }
 
-// initWiki crea la wiki <name>/ nella cartella corrente. È idempotente: ciò che
-// esiste già viene lasciato com'è e segnalato, così si può rilanciare per
-// completare una wiki a cui manca qualche pezzo.
+// initWiki crea nella cartella corrente il progetto <name>/, con la wiki in
+// <name>/library/. È idempotente: ciò che esiste già viene lasciato com'è e
+// segnalato, così si può rilanciare per completare un progetto a cui manca
+// qualche pezzo. Una wiki con il layout precedente (wiki nella radice di
+// <name>/) non si completa: si porta al layout attuale con `upgrade`.
 func initWiki(ctx context.Context, name, locale, lang string, out, errw io.Writer) error {
 	if err := core.ValidWikiName(name); err != nil {
 		return err
 	}
+	if isWiki(name) {
+		return fmt.Errorf(i18n.T().InitOldLayout, name, name)
+	}
 	// una wiki già iniziata resta nella sua lingua: senza --locale la si
 	// completa in quella, con una --locale diversa ci si ferma
-	if have, ok := wikiLanguage(name); ok {
+	if have, ok := wikiLanguage(filepath.Join(name, core.LibraryDir)); ok {
 		if locale != "" && !strings.EqualFold(strings.TrimSpace(locale), have) {
 			return fmt.Errorf(i18n.T().LocaleMismatch, name, have, locale)
 		}
@@ -408,7 +431,11 @@ func initWiki(ctx context.Context, name, locale, lang string, out, errw io.Write
 	if err != nil {
 		return err
 	}
-	steps, err := core.PlanInit(name, files)
+	project, err := projectFiles(i18n.T().Code)
+	if err != nil {
+		return err
+	}
+	steps, err := core.PlanInit(name, files, project)
 	if err != nil {
 		return err
 	}
@@ -428,12 +455,38 @@ func initWiki(ctx context.Context, name, locale, lang string, out, errw io.Write
 			fmt.Fprintln(out, status, filepath.Join(s.Dir, ".git"))
 		}
 	}
-	fmt.Fprintf(out, i18n.T().WikiReady+"\n", name, name, name)
+	fmt.Fprintf(out, i18n.T().WikiReady+"\n", name, name)
 	return nil
 }
 
+// projectFiles legge i file incorporati che wizki gestisce nella radice di
+// ogni progetto della lingua code: README.md (nella lingua), CLAUDE.md e i
+// comandi di Claude Code. Path relativo alla radice del progetto ->
+// contenuto. `init` li crea e `upgrade` li sostituisce, con copia .bak,
+// quando sono diversi.
+func projectFiles(code string) (map[string][]byte, error) {
+	readme, ok := readmes[code]
+	if !ok {
+		return nil, fmt.Errorf(i18n.T().UnknownLocale, code, strings.Join(i18n.Codes(), ", "))
+	}
+	b, err := zkConfig.ReadFile(readme)
+	if err != nil {
+		return nil, err
+	}
+	files := map[string][]byte{"README.md": b}
+	for _, p := range schemaFiles {
+		b, err := zkConfig.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		files[filepath.FromSlash(p)] = b
+	}
+	return files, nil
+}
+
 // zkFiles legge la configurazione zk incorporata della lingua code: path
-// relativo alla radice della wiki (es. .zk/config.toml) -> contenuto.
+// relativo alla radice della wiki (es. .zk/config.toml) -> contenuto. `init`
+// li crea e `upgrade` li sostituisce, con copia .bak, quando sono diversi.
 func zkFiles(code string) (map[string][]byte, error) {
 	dir, ok := zkDirs[code]
 	if !ok {
@@ -547,8 +600,11 @@ func writeIndex(root string, out io.Writer) error {
 	return nil
 }
 
-// upgrade porta la wiki in root al layout e alla configurazione zk incorporati:
-// crea ciò che manca e sostituisce, con copia .bak, i file di .zk/ diversi.
+// upgrade porta la wiki in root al layout attuale. Se la wiki ha il layout
+// precedente (repository git nella sua radice), prima la sposta in
+// root/library e root diventa il progetto. Poi crea ciò che manca e
+// sostituisce, con copia .bak, i file di .zk/ e i file del progetto
+// (README.md, CLAUDE.md, .claude/commands/) diversi da quelli incorporati.
 // Senza -apply stampa soltanto il piano. Le note non vengono mai toccate.
 func upgrade(ctx context.Context, root string, args []string, out io.Writer) error {
 	d := i18n.T()
@@ -568,30 +624,60 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 	if err != nil {
 		return err
 	}
-	exists := map[string]bool{}
-	for _, s := range core.Layout(root, filepath.Base(root), files) {
-		switch s := s.(type) {
-		case core.Mkdir:
-			exists[s.Path] = fx.Exists(s.Path)
-		case core.WriteFile:
-			exists[s.Path] = fx.Exists(s.Path)
-		}
+	proj, err := projectFiles(d.Code)
+	if err != nil {
+		return err
 	}
-	have := map[string][]byte{}
-	for rel := range files {
-		p := filepath.Join(root, rel)
-		exists[p+".bak"] = fx.Exists(p + ".bak")
-		cur, ok, err := fx.ReadIfExists(p)
+	stamp := fx.Today().Format("20060102-150405")
+
+	var steps []core.Step
+	wiki, project := root, projectOf(root)
+	// at dice dove si trova oggi un path che dopo la migrazione sta in wiki:
+	// così il piano si calcola anche in prova, prima dello spostamento.
+	at := func(p string) string { return p }
+	migrate := fx.Exists(filepath.Join(root, ".git"))
+	if migrate {
+		project, wiki = root, filepath.Join(root, core.LibraryDir)
+		if fx.Exists(wiki) {
+			return fmt.Errorf(d.MigrateConflict, root, wiki)
+		}
+		entries, err := os.ReadDir(root)
 		if err != nil {
 			return err
 		}
-		if ok {
-			have[p] = []byte(cur)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		steps = core.PlanMigrate(root, names, proj)
+		at = func(p string) string {
+			rel, err := filepath.Rel(wiki, p)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return p
+			}
+			return filepath.Join(root, rel)
 		}
 	}
-	steps := core.PlanUpgrade(root, files, have, exists, fx.Today().Format("20060102-150405"))
-	indexPath := filepath.Join(root, core.IndexPath)
-	needIndex := !fx.Exists(indexPath)
+	logName := filepath.Base(displayPath(wiki))
+	if project != "" {
+		logName = filepath.Base(displayPath(project))
+	}
+
+	exists, have, err := managedState(core.Layout(wiki, logName, files), wiki, files, at)
+	if err != nil {
+		return err
+	}
+	steps = append(steps, core.PlanUpgrade(wiki, logName, files, have, exists, stamp)...)
+	if project != "" {
+		exists, have, err := managedState(core.ProjectLayout(project, proj), project, proj, func(p string) string { return p })
+		if err != nil {
+			return err
+		}
+		steps = append(steps, core.PlanProjectUpgrade(project, proj, have, exists, stamp)...)
+	}
+
+	indexPath := filepath.Join(wiki, core.IndexPath)
+	needIndex := !fx.Exists(at(indexPath))
 	if len(steps) == 0 && !needIndex {
 		fmt.Fprintf(out, d.UpToDate+"\n", root)
 		return nil
@@ -607,6 +693,8 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 			fmt.Fprintf(out, d.PlanCreate+"\n", s.Path)
 		case core.Replace:
 			fmt.Fprintf(out, d.PlanReplace+"\n", s.Path, s.Backup)
+		case core.Move:
+			fmt.Fprintf(out, d.PlanMove+"\n", s.From, s.To)
 		}
 		if apply {
 			if err := fx.Exec(ctx, s); err != nil {
@@ -620,11 +708,79 @@ func upgrade(ctx context.Context, root string, args []string, out io.Writer) err
 		}
 		return nil
 	}
-	if err := writeIndex(root, out); err != nil {
+	if err := writeIndex(wiki, out); err != nil {
 		return err
+	}
+	if migrate {
+		fmt.Fprintf(out, d.Migrated+"\n", wiki, project)
 	}
 	fmt.Fprintln(out, d.UpgradeDone)
 	return nil
+}
+
+// managedState legge lo stato attuale dei path di un piano di layout con
+// radice dir: quali esistono (comprese le copie .bak dei file gestiti) e il
+// contenuto dei file gestiti presenti (managed: path relativo a dir). at
+// traduce un path nel posto in cui si trova oggi.
+func managedState(layout []core.Step, dir string, managed map[string][]byte, at func(string) string) (map[string]bool, map[string][]byte, error) {
+	exists := map[string]bool{}
+	for _, s := range layout {
+		switch s := s.(type) {
+		case core.Mkdir:
+			exists[s.Path] = fx.Exists(at(s.Path))
+		case core.WriteFile:
+			exists[s.Path] = fx.Exists(at(s.Path))
+		}
+	}
+	have := map[string][]byte{}
+	for rel := range managed {
+		p := filepath.Join(dir, rel)
+		exists[p+".bak"] = fx.Exists(at(p + ".bak"))
+		cur, ok, err := fx.ReadIfExists(at(p))
+		if err != nil {
+			return nil, nil, err
+		}
+		if ok {
+			have[p] = []byte(cur)
+		}
+	}
+	return exists, have, nil
+}
+
+// projectOf restituisce il progetto che contiene la wiki root, "" se non ce
+// n'è uno: la cartella sopra root, se root si chiama library e la cartella
+// sopra è un repository git. Non il repo di wizki: la sua library/ è la wiki
+// di esempio, e README.md e CLAUDE.md lì sono di wizki, non di un progetto.
+func projectOf(root string) string {
+	abs := displayPath(root)
+	if filepath.Base(abs) != core.LibraryDir {
+		return ""
+	}
+	parent := filepath.Dir(abs)
+	if !fx.Exists(filepath.Join(parent, ".git")) || isWizkiRepo(parent) {
+		return ""
+	}
+	return filepath.Join(root, "..")
+}
+
+// isWizkiRepo dice se dir è il repository di wizki (go.mod con module wizki).
+func isWizkiRepo(dir string) bool {
+	mod, ok, err := fx.ReadIfExists(filepath.Join(dir, "go.mod"))
+	if err != nil || !ok {
+		return false
+	}
+	first, _, _ := strings.Cut(mod, "\n")
+	return strings.TrimSpace(first) == "module wizki"
+}
+
+// wikiName è il nome della wiki in root, quello scritto nel marcatore della
+// raw in rete: il nome del progetto, se la wiki ne ha uno, altrimenti quello
+// della sua cartella. Una wiki migrata nel progetto mantiene così il nome.
+func wikiName(root string) string {
+	if p := projectOf(root); p != "" {
+		return filepath.Base(displayPath(p))
+	}
+	return filepath.Base(displayPath(root))
 }
 
 // stdin e interactive si sostituiscono nei test: lì nessuno risponde alle domande.
@@ -719,15 +875,11 @@ func rawRemote(ctx context.Context, root string, args []string, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return err
-	}
 	st, err := fx.ReadRawState(root, absTarget)
 	if err != nil {
 		return err
 	}
-	steps, err := core.PlanRaw(st, filepath.Base(absRoot), fx.Today().Format("20060102-150405"))
+	steps, err := core.PlanRaw(st, wikiName(root), fx.Today().Format("20060102-150405"))
 	if err != nil {
 		return err
 	}

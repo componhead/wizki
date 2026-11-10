@@ -86,6 +86,7 @@ type epubEncryption struct {
 var (
 	mdLink        = regexp.MustCompile(`(!?)\[([^\[\]]*)\]\(([^)]*)\)`)
 	startsHeading = regexp.MustCompile(`^\s*#`)
+	mdHeading     = regexp.MustCompile(`(?m)^\s{0,3}#{1,6}\s+(.*)$`)
 )
 
 // ParseEpub legge un EPUB dai suoi byte: metadati, capitoli in markdown
@@ -197,7 +198,9 @@ func ParseEpub(content []byte) (Book, error) {
 		if strings.TrimSpace(md) == "" {
 			continue
 		}
-		if l := labels[ch]; l != "" && !startsHeading.MatchString(md) {
+		// il titolo dall'indice va in testa solo se il capitolo non ce l'ha già:
+		// spesso c'è un'epigrafe prima dell'<h1>, e il titolo uscirebbe due volte
+		if l := labels[ch]; l != "" && !startsHeading.MatchString(md) && !hasHeading(md, l) {
 			md = "# " + l + "\n\n" + md
 		}
 		md = epubLinks(md, path.Dir(ch), func(img string) bool {
@@ -333,4 +336,24 @@ func first(ss []string) string {
 		}
 	}
 	return ""
+}
+
+// hasHeading dice se il markdown md ha già un titolo (di qualunque livello)
+// con il testo label, ignorando maiuscole, spazi ed enfasi.
+func hasHeading(md, label string) bool {
+	want := headingKey(label)
+	for _, m := range mdHeading.FindAllStringSubmatch(md, -1) {
+		if headingKey(m[1]) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// headingKey normalizza il testo di un titolo per confrontarlo: senza enfasi
+// markdown (*, _), # finali, spazi ripetuti e maiuscole.
+func headingKey(s string) string {
+	s = strings.NewReplacer("*", "", "_", "").Replace(s)
+	s = strings.TrimRight(strings.TrimSpace(s), "# ")
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
 }

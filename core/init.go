@@ -62,13 +62,17 @@ func LogHeader(name string) []byte {
 	return []byte("# Log: " + name + "\n\n")
 }
 
-// PlanInit pianifica la creazione della wiki <name>/: il layout di Layout e
-// infine il repository git.
-func PlanInit(name string, zkFiles map[string][]byte) ([]Step, error) {
+// PlanInit pianifica la creazione del progetto <name>/: i file del progetto
+// (projectFiles, path relativi a <name>/: README.md, CLAUDE.md, comandi di
+// Claude Code), la wiki in <name>/library/ con il layout di Layout e infine
+// il repository git, nella radice del progetto.
+func PlanInit(name string, zkFiles, projectFiles map[string][]byte) ([]Step, error) {
 	if err := ValidWikiName(name); err != nil {
 		return nil, err
 	}
-	return append(Layout(name, name, zkFiles), GitInit{Dir: name}), nil
+	steps := ProjectLayout(name, projectFiles)
+	steps = append(steps, Layout(filepath.Join(name, LibraryDir), name, zkFiles)...)
+	return append(steps, GitInit{Dir: name}), nil
 }
 
 // Layout pianifica i file e le cartelle di una wiki con radice root: le

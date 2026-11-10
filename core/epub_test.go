@@ -216,3 +216,36 @@ func stepString(s Step) string {
 	}
 	return fmt.Sprintf("%#v", s)
 }
+
+// TestParseEpubEpigraphHeading: un capitolo con un'epigrafe prima del suo
+// <h1> non riceve in testa anche il titolo dall'indice (niente titolo doppio);
+// un capitolo senza titolo proprio lo riceve ancora.
+func TestParseEpubEpigraphHeading(t *testing.T) {
+	files := testEpub3()
+	files["OEBPS/text/cap1.xhtml"] = `<html><head><title/></head><body>
+<blockquote><p><b><em>Un verso in esergo</em></b></p></blockquote>
+<h1><span>Le </span><span>origini</span></h1><p>Le prime scuole nacquero nei conventi.</p></body></html>`
+	files["OEBPS/text/cap 2.xhtml"] = `<html><body><p>Nel 1923 la riforma Gentile.</p></body></html>`
+	b, err := ParseEpub(makeEpub(t, files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(b.Chapters[0], "origini"); n != 1 {
+		t.Errorf("titolo del capitolo 1 ripetuto %d volte:\n%s", n, b.Chapters[0])
+	}
+	if !strings.Contains(b.Chapters[0], "esergo") {
+		t.Errorf("epigrafe persa:\n%s", b.Chapters[0])
+	}
+	if !strings.HasPrefix(b.Chapters[1], "# Il Novecento\n") {
+		t.Errorf("capitolo 2 senza titolo dall'indice:\n%s", b.Chapters[1])
+	}
+}
+
+// TestHeadingKey: il confronto dei titoli ignora maiuscole, spazi, enfasi e # finali.
+func TestHeadingKey(t *testing.T) {
+	for _, s := range []string{"1. The Sound", "**1.  the sound** ##", " _1. THE SOUND_ "} {
+		if got := headingKey(s); got != "1. the sound" {
+			t.Errorf("headingKey(%q) = %q", s, got)
+		}
+	}
+}

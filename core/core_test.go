@@ -177,43 +177,52 @@ func TestIDFindings(t *testing.T) {
 	}
 }
 
+// TestPlanInit: prima i file del progetto in w/, poi la wiki in w/library/,
+// infine il repository git nella radice del progetto.
 func TestPlanInit(t *testing.T) {
 	steps, err := PlanInit("w", map[string][]byte{
 		".zk/templates/t.md": []byte("T"),
 		".zk/config.toml":    []byte("C"),
+	}, map[string][]byte{
+		"README.md":             []byte("R"),
+		".claude/commands/i.md": []byte("I"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []Step{
-		Mkdir{"w"}, WriteFile{Path: "w/.gitkeep"},
-		Mkdir{"w/inbox"}, WriteFile{Path: "w/inbox/.gitkeep"},
-		Mkdir{"w/raw"}, WriteFile{Path: "w/raw/.gitkeep"},
-		Mkdir{"w/raw/pdf"}, WriteFile{Path: "w/raw/pdf/.gitkeep"},
-		Mkdir{"w/raw/doc"}, WriteFile{Path: "w/raw/doc/.gitkeep"},
-		Mkdir{"w/raw/assets"}, WriteFile{Path: "w/raw/assets/.gitkeep"},
-		Mkdir{"w/raw/data"}, WriteFile{Path: "w/raw/data/.gitkeep"},
-		Mkdir{"w/raw/epub"}, WriteFile{Path: "w/raw/epub/.gitkeep"},
-		Mkdir{"w/raw/text"}, WriteFile{Path: "w/raw/text/.gitkeep"},
-		Mkdir{"w/sources"}, WriteFile{Path: "w/sources/.gitkeep"},
-		Mkdir{"w/topics"}, WriteFile{Path: "w/topics/.gitkeep"},
-		Mkdir{"w/entities"}, WriteFile{Path: "w/entities/.gitkeep"},
-		Mkdir{"w/analyses"}, WriteFile{Path: "w/analyses/.gitkeep"},
-		Mkdir{"w/.zk"}, WriteFile{Path: "w/.zk/.gitkeep"},
-		WriteFile{"w/.zk/config.toml", []byte("C")},
-		Mkdir{"w/.zk/templates"}, WriteFile{Path: "w/.zk/templates/.gitkeep"},
-		WriteFile{"w/.zk/templates/t.md", []byte("T")},
-		WriteFile{"w/log.md", []byte("# Log: w\n\n")},
-		WriteFile{"w/overview.md", OverviewPage()},
-		WriteFile{"w/index.md", []byte(BuildIndex([]Page{ParsePage(OverviewPath, string(OverviewPage()))}))},
-		WriteFile{"w/.gitignore", WikiGitignore},
+		Mkdir{"w"},
+		Mkdir{"w/.claude"}, Mkdir{"w/.claude/commands"},
+		WriteFile{"w/.claude/commands/i.md", []byte("I")},
+		WriteFile{"w/README.md", []byte("R")},
+		Mkdir{"w/library"}, WriteFile{Path: "w/library/.gitkeep"},
+		Mkdir{"w/library/inbox"}, WriteFile{Path: "w/library/inbox/.gitkeep"},
+		Mkdir{"w/library/raw"}, WriteFile{Path: "w/library/raw/.gitkeep"},
+		Mkdir{"w/library/raw/pdf"}, WriteFile{Path: "w/library/raw/pdf/.gitkeep"},
+		Mkdir{"w/library/raw/doc"}, WriteFile{Path: "w/library/raw/doc/.gitkeep"},
+		Mkdir{"w/library/raw/assets"}, WriteFile{Path: "w/library/raw/assets/.gitkeep"},
+		Mkdir{"w/library/raw/data"}, WriteFile{Path: "w/library/raw/data/.gitkeep"},
+		Mkdir{"w/library/raw/epub"}, WriteFile{Path: "w/library/raw/epub/.gitkeep"},
+		Mkdir{"w/library/raw/text"}, WriteFile{Path: "w/library/raw/text/.gitkeep"},
+		Mkdir{"w/library/sources"}, WriteFile{Path: "w/library/sources/.gitkeep"},
+		Mkdir{"w/library/topics"}, WriteFile{Path: "w/library/topics/.gitkeep"},
+		Mkdir{"w/library/entities"}, WriteFile{Path: "w/library/entities/.gitkeep"},
+		Mkdir{"w/library/analyses"}, WriteFile{Path: "w/library/analyses/.gitkeep"},
+		Mkdir{"w/library/.zk"}, WriteFile{Path: "w/library/.zk/.gitkeep"},
+		WriteFile{"w/library/.zk/config.toml", []byte("C")},
+		Mkdir{"w/library/.zk/templates"}, WriteFile{Path: "w/library/.zk/templates/.gitkeep"},
+		WriteFile{"w/library/.zk/templates/t.md", []byte("T")},
+		WriteFile{"w/library/log.md", []byte("# Log: w\n\n")},
+		WriteFile{"w/library/overview.md", OverviewPage()},
+		WriteFile{"w/library/index.md", []byte(BuildIndex([]Page{ParsePage(OverviewPath, string(OverviewPage()))}))},
+		WriteFile{"w/library/.gitignore", WikiGitignore},
 		GitInit{"w"},
 	}
 	if !reflect.DeepEqual(steps, want) {
 		t.Errorf("got %#v", steps)
 	}
 	for _, bad := range []string{"", "  ", ".", "..", "a/b", `a\b`, "-x"} {
-		if _, err := PlanInit(bad, nil); err == nil {
+		if _, err := PlanInit(bad, nil, nil); err == nil {
 			t.Errorf("atteso errore per nome %q", bad)
 		}
 	}

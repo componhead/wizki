@@ -20,6 +20,7 @@ type Dict struct {
 	PlanCreateDir, PlanCreate                    string // path
 	PlanReplace                                  string // path, copia
 	PlanLink                                     string // link, destinazione
+	PlanMove                                     string // da, a
 
 	// ------------------------------------------------------ extract
 	AssetsMoved   string // "N immagini locali"
@@ -44,7 +45,8 @@ type Dict struct {
 	InitMissingDep    string // dipendenza
 	Created           string
 	AlreadyThere      string
-	WikiReady         string // nome, nome, nome
+	WikiReady         string // nome, nome
+	InitOldLayout     string // nome, nome
 	LocaleMismatch    string // wiki, lingua della wiki, lingua chiesta
 	WikiNameEmpty     string
 	WikiNameInvalid   string // nome
@@ -73,8 +75,10 @@ type Dict struct {
 	AnalysisStale  string // data, fonti
 
 	// ------------------------------------------------------ upgrade
-	UpToDate    string // radice
-	UpgradeDone string
+	UpToDate        string // radice
+	UpgradeDone     string
+	MigrateConflict string // radice, library
+	Migrated        string // wiki, progetto
 
 	// --------------------------------------------------------- deps
 	DepsHeader       string
@@ -179,6 +183,7 @@ var IT = Dict{
 	PlanCreate:            "crea: %s",
 	PlanReplace:           "aggiorna: %s (copia del vecchio in %s)",
 	PlanLink:              "collega: %s -> %s",
+	PlanMove:              "sposta: %s -> %s",
 
 	AssetsMoved:   "%s: con la fonte in raw/assets/",
 	AssetsMissing: "immagini locali non trovate (restano come riferimenti): %s",
@@ -201,7 +206,8 @@ var IT = Dict{
 	InitMissingDep:    "manca %s, che serve a init: installalo e rilancia (non ho creato nulla)",
 	Created:           "creato:",
 	AlreadyThere:      "già presente:",
-	WikiReady:         "wiki %q pronta: usa wizki -root %s (o WIKI_ROOT=%s)",
+	WikiReady:         "progetto %q pronto, con la wiki in library/: entra con cd %s e apri claude",
+	InitOldLayout:     "%s è una wiki con il layout precedente (wiki nella radice): portala al layout attuale con wizki -root %s upgrade",
 	LocaleMismatch:    "%s è una wiki in lingua %q: non la completo in %q (togli --locale o usa quella lingua)",
 	WikiNameEmpty:     "nome della wiki vuoto",
 	WikiNameInvalid:   "nome della wiki %q non valido",
@@ -228,8 +234,10 @@ var IT = Dict{
 	AnalysisNoRefs: "analisi senza link a fonti, topic o entità",
 	AnalysisStale:  "fonti acquisite dopo il %s sugli stessi topic/entità: %s; da rivedere?",
 
-	UpToDate:    "%s è già aggiornata",
-	UpgradeDone: "fatto. Confronta i file .bak con quelli nuovi, poi cancellali; le note non sono state toccate: lancia wizki lint",
+	UpToDate:        "%s è già aggiornata",
+	UpgradeDone:     "fatto. Confronta i file .bak con quelli nuovi, poi cancellali; le note non sono state toccate: lancia wizki lint",
+	MigrateConflict: "%s ha il layout precedente ma %s esiste già: spostala o rinominala e rilancia",
+	Migrated:        "la wiki ora è in %s: lancia wizki e claude da %s, senza -root",
 
 	DepsHeader:       "Dipendenze:",
 	ZkNotPackaged:    "zk non è tra i pacchetti di %s: istruzioni su %s",
@@ -347,6 +355,7 @@ var EN = Dict{
 	PlanCreate:            "create: %s",
 	PlanReplace:           "update: %s (old copy in %s)",
 	PlanLink:              "link: %s -> %s",
+	PlanMove:              "move: %s -> %s",
 
 	AssetsMoved:   "%s: with the source in raw/assets/",
 	AssetsMissing: "local images not found (left as references): %s",
@@ -369,7 +378,8 @@ var EN = Dict{
 	InitMissingDep:    "%s is missing and init needs it: install it and run again (nothing was created)",
 	Created:           "created:",
 	AlreadyThere:      "already there:",
-	WikiReady:         "wiki %q ready: use wizki -root %s (or WIKI_ROOT=%s)",
+	WikiReady:         "project %q ready, with the wiki in library/: cd %s and open claude",
+	InitOldLayout:     "%s is a wiki with the previous layout (wiki at the root): bring it to the current layout with wizki -root %s upgrade",
 	LocaleMismatch:    "%s is a wiki in %q: not completing it in %q (drop --locale or use that language)",
 	WikiNameEmpty:     "empty wiki name",
 	WikiNameInvalid:   "invalid wiki name %q",
@@ -396,8 +406,10 @@ var EN = Dict{
 	AnalysisNoRefs: "analysis without links to sources, topics or entities",
 	AnalysisStale:  "sources ingested after %s on the same topics/entities: %s; review it?",
 
-	UpToDate:    "%s is already up to date",
-	UpgradeDone: "done. Compare the .bak files with the new ones, then delete them; notes were not touched: run wizki lint",
+	UpToDate:        "%s is already up to date",
+	UpgradeDone:     "done. Compare the .bak files with the new ones, then delete them; notes were not touched: run wizki lint",
+	MigrateConflict: "%s has the previous layout but %s already exists: move or rename it and run again",
+	Migrated:        "the wiki is now in %s: run wizki and claude from %s, without -root",
 
 	DepsHeader:       "Dependencies:",
 	ZkNotPackaged:    "zk is not among the packages of %s: instructions at %s",

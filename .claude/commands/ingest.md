@@ -1,14 +1,14 @@
 ---
 description: Acquisisce una fonte dalla inbox nella wiki zk
 argument-hint: "[@library/inbox/<file>]  (Tab dopo @ per completare; vuoto = scegli dalla inbox)"
-allowed-tools: Bash(./bin/wizki inbox:*)
+allowed-tools: Bash(wizki inbox:*)
 ---
 
 Argomento ricevuto: `$ARGUMENTS`
 
-Fonti in inbox, nell'ordine di acquisizione (`./bin/wizki inbox`):
+Fonti in inbox, nell'ordine di acquisizione (`wizki inbox`):
 
-!`./bin/wizki inbox 2>&1`
+!`wizki inbox 2>&1`
 
 Se l'argomento è vuoto, proponimi le fonti elencate sopra come scelta
 (AskUserQuestion, la prima marcata come consigliata; se sono più di 4, le prime 4)
